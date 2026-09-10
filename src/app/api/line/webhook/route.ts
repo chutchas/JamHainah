@@ -42,7 +42,13 @@ export async function POST(req: NextRequest) {
 
         // ผู้ใช้ต้องไม่เจอความเงียบ
         // เงียบแปลว่าเขาไม่รู้ว่าควรลองใหม่ หรือแอปพัง หรือรออยู่
-        if (e?.replyToken) {
+        //
+        // ยกเว้นกรณีที่ตัวการ reply เองคือสิ่งที่พัง — reply token ใช้ได้ครั้งเดียว
+        // ยิงซ้ำจะได้ "Invalid reply token" เปล่า ๆ แล้วทำให้ log อ่านยากขึ้น
+        const replyItselfFailed =
+          err instanceof Error && err.message.includes('/message/reply');
+
+        if (e?.replyToken && !replyItselfFailed) {
           try {
             await reply(e.replyToken, [
               {

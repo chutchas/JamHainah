@@ -26,13 +26,14 @@ export interface PendingState {
 /* ---------------- users ---------------- */
 
 export async function upsertUser(lineUserId: string, displayName?: string | null) {
-  const supabase = db();
-  await supabase
+  const { error } = await db()
     .from('users')
     .upsert(
       { line_user_id: lineUserId, display_name: displayName ?? null, unfollowed_at: null, deleted_at: null },
       { onConflict: 'line_user_id' }
     );
+  // เดิมฟังก์ชันนี้กลืน error เงียบ ๆ ทำให้ขั้นถัดไปพังโดยไม่รู้ว่าต้นเหตุอยู่ตรงนี้
+  if (error) throw new Error(`upsertUser: ${error.message}`);
 }
 
 export async function markUnfollowed(lineUserId: string) {
@@ -45,10 +46,11 @@ export async function getPending(lineUserId: string): Promise<PendingState> {
 }
 
 export async function setPending(lineUserId: string, pending: PendingState | null) {
-  await db()
+  const { error } = await db()
     .from('users')
     .update({ pending: pending ?? {} })
     .eq('line_user_id', lineUserId);
+  if (error) throw new Error(`setPending: ${error.message}`);
 }
 
 /** จับคู่ผู้ใช้กับร้านที่เขาสแกน QR มา (ภายใน 24 ชม.) */
@@ -132,7 +134,11 @@ export async function updateDocument(id: string, patch: Partial<DocumentRow>) {
 }
 
 export async function archiveDocument(id: string) {
-  await db().from('documents').update({ archived_at: new Date().toISOString() }).eq('id', id);
+  const { error } = await db()
+    .from('documents')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw new Error(`archiveDocument: ${error.message}`);
   await cancelPendingReminders(id);
 }
 

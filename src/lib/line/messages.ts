@@ -44,13 +44,26 @@ function chips(items: Array<{ label: string; data?: string; date?: boolean; came
   };
 }
 
+/**
+ * LINE ปฏิเสธ text ที่เป็นสตริงว่างด้วย 400 "message is invalid"
+ * และไม่บอกว่าฟิลด์ไหน — เสียเวลาไล่หานาน
+ * ตรงนี้จึงกันไว้ที่ต้นทาง: ไม่มี label ก็ไม่ต้องมีคอลัมน์ซ้าย
+ */
 function row(label: string, value: string, hot = false): LineMessage {
+  const right: LineMessage = {
+    type: 'text', text: value || '-', size: 'sm',
+    weight: hot ? 'bold' : 'regular',
+    color: hot ? WARN : undefined,
+    align: 'end', flex: 4, wrap: true,
+  };
+  if (!label) {
+    return { type: 'box', layout: 'horizontal', spacing: 'sm', contents: [right] };
+  }
   return {
     type: 'box', layout: 'horizontal', spacing: 'sm',
     contents: [
       { type: 'text', text: label, size: 'sm', color: MUTED, flex: 3 },
-      { type: 'text', text: value, size: 'sm', weight: hot ? 'bold' : 'regular',
-        color: hot ? WARN : undefined, align: 'end', flex: 4, wrap: true },
+      right,
     ],
   };
 }
@@ -112,7 +125,7 @@ export function confirmExtracted(args: {
   const rows: LineMessage[] = [];
   if (args.label) rows.push(row('เลขที่/ทะเบียน', args.label));
   rows.push(row('หมดอายุ', formatThai(args.expiry)));
-  rows.push(row('', humanRemaining(args.today, args.expiry), true));
+  rows.push(row('เหลืออีก', humanRemaining(args.today, args.expiry), true));
 
   return [
     text('อ่านได้แบบนี้ครับ ถูกต้องไหม'),
