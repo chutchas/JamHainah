@@ -17,9 +17,12 @@ export interface DocumentRow {
 }
 
 export interface PendingState {
-  awaiting?: 'image' | 'date';
+  awaiting?: 'image' | 'date' | 'type';
   docTypeKey?: string;
   documentId?: string;
+  /** สิ่งที่ OCR อ่านได้แล้ว — เก็บไว้เพื่อไม่ให้ผู้ใช้ต้องกรอกซ้ำ */
+  expiryDate?: string;
+  label?: string;
   at?: string;
 }
 

@@ -9,7 +9,7 @@
  *   5. บอกวันที่จริงเสมอ ห้าม "เร็ว ๆ นี้"
  *   6. ไม่มีคำว่า โปรโมชั่น / พิเศษ / ด่วน
  */
-import { DocType, SUGGEST_AFTER_FIRST, displayName, docType } from '@/lib/domain/docTypes';
+import { ASK_TYPE_CHOICES, DocType, SUGGEST_AFTER_FIRST, displayName, docType } from '@/lib/domain/docTypes';
 import { ISODate, formatThai, humanRemaining } from '@/lib/domain/thaiDate';
 
 export type LineMessage = Record<string, unknown>;
@@ -170,14 +170,25 @@ export function askDate(args: { typeKey?: string; documentId?: string; reason?: 
   ];
 }
 
-/** ถามว่าเอกสารประเภทไหน (ตอน OCR ไม่รู้ประเภท หรือผู้ใช้เลือกเอง) */
-export function askType(): LineMessage[] {
-  const opts: DocType[] = ['vehicle_tax', 'cmi', 'motor_insurance', 'driving_license', 'passport', 'custom'].map(docType);
+/**
+ * ถามประเภทเอกสาร — ใช้เมื่อ OCR อ่านวันที่ได้แต่ไม่รู้ว่าเอกสารอะไร
+ *
+ * สำคัญ: ต้องบอกด้วยว่าเราอ่านอะไรได้แล้วบ้าง
+ * ไม่งั้นผู้ใช้จะรู้สึกว่าที่ส่งรูปไปเมื่อกี้สูญเปล่า
+ * และห้ามขึ้นหัวการ์ดว่า "อื่น ๆ" ทั้งที่ยังไม่ได้ถาม — นั่นคือการเดา
+ */
+export function askType(ctx?: { expiry?: string | null; label?: string | null }): LineMessage[] {
+  const opts: DocType[] = ASK_TYPE_CHOICES.map(docType);
+  const known: string[] = [];
+  if (ctx?.label) known.push(`ในเอกสารเขียนว่า "${ctx.label}"`);
+  if (ctx?.expiry) known.push(`หมดอายุ ${formatThai(ctx.expiry)}`);
+
+  const body = known.length
+    ? `ผมอ่านได้แค่นี้ครับ\n${known.join('\n')}\n\nแต่ไม่แน่ใจว่าเป็นเอกสารอะไร บอกผมหน่อยครับ`
+    : 'เอกสารนี้เป็นประเภทไหนครับ บอกผมหน่อย';
+
   return [
-    text(
-      'เอกสารประเภทไหนครับ',
-      chips(opts.map((t) => ({ label: `${t.emoji} ${t.label}`, data: pb('type', { k: t.key }) })))
-    ),
+    text(body, chips(opts.map((t) => ({ label: `${t.emoji} ${t.label}`, data: pb('type', { k: t.key }) })))),
   ];
 }
 

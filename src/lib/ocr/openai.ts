@@ -6,6 +6,15 @@ import type { Extraction, OcrProvider } from './types';
 
 const KEYS = DOC_TYPES.map((t) => t.key);
 
+/**
+ * รายการที่ให้โมเดลเลือก — ตัด tier 3 (custom) ออกโดยตั้งใจ
+ *
+ * ถ้าปล่อย 'custom' ไว้ในตัวเลือก โมเดลจะเลือกมันทุกครั้งที่เจอเอกสาร
+ * ที่ไม่รู้จัก แทนที่จะตอบ null — แล้วเราจะไม่มีวันรู้ว่าควรถามผู้ใช้
+ * และผู้ใช้จะเห็นหัวการ์ดว่า "อื่น ๆ" ทั้งที่เอกสารมีชื่อชัดเจน
+ */
+const OCR_KEYS = DOC_TYPES.filter((t) => t.tier !== 3).map((t) => t.key);
+
 const SYSTEM = `คุณคือระบบอ่านเอกสารราชการและกรมธรรม์ของไทย
 หน้าที่เดียวของคุณคือหา "วันหมดอายุ" ของเอกสารในรูป
 
@@ -21,8 +30,12 @@ const SYSTEM = `คุณคือระบบอ่านเอกสารร�
    อย่าเดา — การเดาผิดแย่กว่าการบอกว่าอ่านไม่ออก
 4. ถ้ารูปไม่ใช่เอกสาร (เช่น รูปคน สัตว์ วิว อาหาร) ให้ isDocument = false
 
-ประเภทเอกสารที่รู้จัก: ${KEYS.join(', ')}
-ถ้าไม่ตรงกับอันไหนเลยให้ docTypeKey = null`;
+ประเภทเอกสารที่รู้จัก: ${OCR_KEYS.join(', ')}
+
+5. ถ้าเอกสารไม่ตรงกับรายการข้างบนเลย ให้ docTypeKey = null เสมอ
+   ห้ามเดาให้ใกล้เคียง และห้ามยัดลงประเภทที่ไม่ใช่
+   เราจะไปถามผู้ใช้เอง ซึ่งดีกว่าเดาผิด
+   แต่ยังต้องพยายามอ่านวันหมดอายุกับชื่อเอกสารมาให้ได้`;
 
 const SCHEMA = {
   type: 'object',
@@ -30,7 +43,7 @@ const SCHEMA = {
   required: ['isDocument', 'docTypeKey', 'label', 'expiryDate', 'confidence', 'notes'],
   properties: {
     isDocument: { type: 'boolean' },
-    docTypeKey: { type: ['string', 'null'], enum: [...KEYS, null] },
+    docTypeKey: { type: ['string', 'null'], enum: [...OCR_KEYS, null] },
     label: { type: ['string', 'null'], description: 'เลขทะเบียนรถ เลขกรมธรรม์ หรือเลขเอกสาร' },
     expiryDate: { type: ['string', 'null'], description: 'YYYY-MM-DD เป็น ค.ศ.' },
     confidence: { type: 'number' },
@@ -90,7 +103,7 @@ function miss(): Extraction {
 export function normalize(parsed: Record<string, unknown>): Extraction {
   const out: Extraction = {
     isDocument: parsed.isDocument !== false,
-    docTypeKey: typeof parsed.docTypeKey === 'string' && KEYS.includes(parsed.docTypeKey) ? parsed.docTypeKey : null,
+    docTypeKey: typeof parsed.docTypeKey === 'string' && OCR_KEYS.includes(parsed.docTypeKey) ? parsed.docTypeKey : null,
     label: typeof parsed.label === 'string' && parsed.label.trim() ? parsed.label.trim().slice(0, 60) : null,
     expiryDate: null,
     confidence: typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : 0,

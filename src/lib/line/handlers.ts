@@ -90,17 +90,24 @@ async function onImage(ev: Ev, userId: string, messageId: string) {
 
   const typeKey = extraction.docTypeKey ?? pending.docTypeKey ?? null;
 
+  // ไม่รู้ว่าเอกสารอะไร — ถามผู้ใช้ ห้ามยัดลง "อื่น ๆ" แล้วเดาจังหวะเตือนเอง
+  // แต่เก็บวันที่กับชื่อที่อ่านได้ไว้ก่อน จะได้ไม่ต้องให้เขาทำซ้ำ
+  if (!typeKey) {
+    await repo.track('ocr_type_unknown', userId, { label: extraction.label });
+    await repo.setPending(userId, {
+      awaiting: 'type',
+      expiryDate: extraction.expiryDate ?? undefined,
+      label: extraction.label ?? undefined,
+      at: new Date().toISOString(),
+    });
+    return reply(ev.replyToken, M.askType({ expiry: extraction.expiryDate, label: extraction.label }));
+  }
+
   // อ่านไม่ชัด หรือไม่มีวันที่ — ไม่เดา ไปถามตรง ๆ (ฉาก 02b)
   if (!extraction.expiryDate || extraction.confidence < CONFIDENCE_FLOOR) {
     await repo.track('ocr_miss', userId, { confidence: extraction.confidence, typeKey });
-    await repo.setPending(userId, { awaiting: 'date', docTypeKey: typeKey ?? undefined, at: new Date().toISOString() });
-    if (!typeKey) return reply(ev.replyToken, M.askType());
+    await repo.setPending(userId, { awaiting: 'date', docTypeKey: typeKey, at: new Date().toISOString() });
     return reply(ev.replyToken, M.askDate({ typeKey, reason: 'ocr_miss' }));
-  }
-
-  if (!typeKey) {
-    await repo.setPending(userId, { awaiting: 'date', at: new Date().toISOString() });
-    return reply(ev.replyToken, M.askType());
   }
 
   const doc = await repo.createDocument({
@@ -187,6 +194,26 @@ async function onPostback(ev: Ev, userId: string) {
     case 'type': {
       if (!typeKey) return;
       const t = docType(typeKey);
+      const pendingType = await repo.getPending(userId);
+
+      // เราอ่านวันที่จากรูปได้แล้ว ขาดแค่ประเภท — พอเขาตอบก็จบเลย
+      // ไม่ต้องให้ถ่ายรูปใหม่หรือเลือกวันที่ซ้ำ
+      if (pendingType.expiryDate && isISODate(pendingType.expiryDate)) {
+        const doc = await repo.createDocument({
+          lineUserId: userId,
+          docTypeKey: typeKey,
+          label: pendingType.label ?? null,
+          expiryDate: pendingType.expiryDate,
+          confirmed: false,
+          source: 'ocr',
+          meta: { type_from_user: true },
+        });
+        await repo.setPending(userId, null);
+        return reply(
+          ev.replyToken,
+          M.confirmExtracted({ documentId: doc.id, typeKey, label: doc.label, expiry: doc.expiry_date, today })
+        );
+      }
       await repo.setPending(userId, { awaiting: t.ocr ? 'image' : 'date', docTypeKey: typeKey, at: new Date().toISOString() });
       if (!t.ocr) return reply(ev.replyToken, M.askDate({ typeKey, reason: 'manual' }));
       return reply(ev.replyToken, [

@@ -59,12 +59,19 @@ export const DOC_TYPES: DocType[] = [
     offsets: [-30, -7, 1], termMonths: 12, ocr: true,
   },
   {
-    key: 'driving_license', label: 'ใบขับขี่', emoji: '🪪', tier: 1,
+    key: 'driving_license', label: 'ใบขับขี่', emoji: '🚗', tier: 1,
     offsets: [-90, -30, -7, 1], termMonths: 60, renewWindowDays: 90, ocr: true,
     hint: 'ถ่ายด้านหน้าใบขับขี่',
   },
 
   // ---------------- tier 2 : ยังไม่มีเงิน แต่คือเหตุผลที่เขาอยู่ ----------------
+  {
+    // เอกสารที่คนไทยมีกันทุกคน — ควรอยู่ในระบบตั้งแต่แรก
+    // ต่อได้ล่วงหน้า 60 วัน · เลยกำหนดเกิน 60 วันมีค่าปรับ
+    key: 'national_id', label: 'บัตรประชาชน', emoji: '🪪', tier: 2,
+    offsets: [-60, -30, -7, 1], termMonths: 96, renewWindowDays: 60, ocr: true,
+    hint: 'ถ่ายด้านหน้าบัตร ให้เห็นวันหมดอายุชัด ๆ',
+  },
   {
     key: 'passport', label: 'พาสปอร์ต', emoji: '📕', tier: 2,
     // เตือนตั้งแต่เหลือ 9 เดือน — ช่วงเวลาเดียวที่ไม่มีใครในโลกเตือนเขา
@@ -98,6 +105,12 @@ export function isKnownDocType(key: string): boolean {
 
 /** ประเภทที่เสนอเป็นชิปหลังบันทึกใบแรก (ฉาก 03) */
 export const SUGGEST_AFTER_FIRST = ['cmi', 'motor_insurance', 'driving_license', 'passport'];
+
+/** ตัวเลือกที่ให้ผู้ใช้กดตอนเราเดาประเภทไม่ออก */
+export const ASK_TYPE_CHOICES = [
+  'vehicle_tax', 'cmi', 'motor_insurance', 'driving_license',
+  'national_id', 'passport', 'health_insurance', 'custom',
+];
 
 /** ชื่อเต็มที่ใช้แสดง เช่น "📄 ภาษีรถ · 1กก 1234" */
 export function displayName(typeKey: string, label?: string | null): string {
