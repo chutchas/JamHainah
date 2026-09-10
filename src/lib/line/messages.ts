@@ -1,0 +1,430 @@
+/**
+ * ข้อความทุกชิ้นที่บอทพูด — อ้างอิงสคริปต์ "บทสนทนาจำให้นะ"
+ *
+ * กฎการเขียน 6 ข้อ (บังคับกับทุกข้อความที่เพิ่มใหม่):
+ *   1. ไม่เกิน 4 บรรทัด
+ *   2. ทุกข้อความมีปุ่ม ผู้ใช้ไม่ต้องพิมพ์
+ *   3. ผู้ใช้ทักก่อน = reply (ฟรี) · เรายิงเอง = push (฿0.06)
+ *   4. รวมหลายเอกสารเป็นข้อความเดียวเสมอ
+ *   5. บอกวันที่จริงเสมอ ห้าม "เร็ว ๆ นี้"
+ *   6. ไม่มีคำว่า โปรโมชั่น / พิเศษ / ด่วน
+ */
+import { DocType, SUGGEST_AFTER_FIRST, displayName, docType } from '@/lib/domain/docTypes';
+import { ISODate, formatThai, humanRemaining } from '@/lib/domain/thaiDate';
+
+export type LineMessage = Record<string, unknown>;
+
+const GREEN = '#06C755';
+const WARN = '#B8460E';
+const MUTED = '#8A9A93';
+
+/* ---------- helpers ---------- */
+
+export function pb(action: string, params: Record<string, string> = {}): string {
+  return new URLSearchParams({ a: action, ...params }).toString();
+}
+
+function text(t: string, quickReply?: LineMessage): LineMessage {
+  return quickReply ? { type: 'text', text: t, quickReply } : { type: 'text', text: t };
+}
+
+function chips(items: Array<{ label: string; data?: string; date?: boolean; camera?: boolean }>): LineMessage {
+  return {
+    items: items.slice(0, 13).map((c) => ({
+      type: 'action',
+      action: c.camera
+        ? { type: 'camera', label: c.label }
+        : c.date
+        ? {
+            type: 'datetimepicker', label: c.label, data: c.data ?? pb('date'),
+            mode: 'date', initial: undefined,
+          }
+        : { type: 'postback', label: c.label, data: c.data!, displayText: c.label },
+    })),
+  };
+}
+
+function row(label: string, value: string, hot = false): LineMessage {
+  return {
+    type: 'box', layout: 'horizontal', spacing: 'sm',
+    contents: [
+      { type: 'text', text: label, size: 'sm', color: MUTED, flex: 3 },
+      { type: 'text', text: value, size: 'sm', weight: hot ? 'bold' : 'regular',
+        color: hot ? WARN : undefined, align: 'end', flex: 4, wrap: true },
+    ],
+  };
+}
+
+function bubble(body: LineMessage[], footer?: LineMessage[], altText = 'จำให้นะ'): LineMessage {
+  const contents: Record<string, unknown> = {
+    type: 'bubble',
+    body: { type: 'box', layout: 'vertical', spacing: 'md', contents: body },
+  };
+  if (footer?.length) {
+    contents.footer = { type: 'box', layout: 'vertical', spacing: 'sm', contents: footer };
+  }
+  return { type: 'flex', altText, contents };
+}
+
+function button(label: string, data: string, style: 'primary' | 'secondary' | 'link' = 'link'): LineMessage {
+  return {
+    type: 'button', style, height: 'sm',
+    color: style === 'primary' ? GREEN : undefined,
+    action: { type: 'postback', label, data, displayText: label },
+  };
+}
+
+/* ============================================================
+ * ฉาก 01 — กด Add เพื่อน
+ * เป้าหมายเดียว: ให้เขาส่งรูปภายใน 60 วินาที
+ * ห้ามมี เงื่อนไขการใช้บริการ / ราคา / การสมัคร ตรงนี้
+ * ============================================================ */
+export function greeting(): LineMessage[] {
+  return [
+    text(
+      'สวัสดีครับ 👋\n' +
+        'ต่อไปนี้ผมจำวันหมดอายุเอกสารให้เอง\n' +
+        'ภาษีรถ · พ.ร.บ. · ใบขับขี่ · ประกัน · พาสปอร์ต\n\n' +
+        'ถ่ายรูปเอกสารส่งมาได้เลย\n' +
+        'ไม่ต้องสมัคร ไม่ต้องกรอกอะไรครับ',
+      chips([
+        { label: '📸 ส่งรูปเอกสาร', camera: true },
+        { label: '📅 พิมพ์วันที่เอง', data: pb('manual') },
+      ])
+    ),
+  ];
+}
+
+/* ============================================================
+ * ฉาก 02 — อ่านรูปได้ ให้คนยืนยัน
+ * ปุ่ม "ถูกต้อง" คือหัวใจของสินค้าทั้งตัว:
+ *   ความแม่นยำเป็น 100% ทันที และทุกครั้งที่กด "แก้ไข"
+ *   เราได้ตัวอย่างที่โมเดลอ่านพลาดพร้อมเฉลย
+ * ============================================================ */
+export function confirmExtracted(args: {
+  documentId: string;
+  typeKey: string;
+  label?: string | null;
+  expiry: ISODate;
+  today: ISODate;
+}): LineMessage[] {
+  const t = docType(args.typeKey);
+  const rows: LineMessage[] = [];
+  if (args.label) rows.push(row('เลขที่/ทะเบียน', args.label));
+  rows.push(row('หมดอายุ', formatThai(args.expiry)));
+  rows.push(row('', humanRemaining(args.today, args.expiry), true));
+
+  return [
+    text('อ่านได้แบบนี้ครับ ถูกต้องไหม'),
+    bubble(
+      [
+        { type: 'text', text: `${t.emoji} ${t.label}`, weight: 'bold', size: 'lg', wrap: true },
+        { type: 'separator', margin: 'md' },
+        { type: 'box', layout: 'vertical', spacing: 'sm', margin: 'md', contents: rows },
+      ],
+      [
+        button('✅ ถูกต้อง', pb('confirm', { d: args.documentId }), 'primary'),
+        button('✏️ แก้ไขวันที่', pb('edit', { d: args.documentId })),
+      ],
+      `${t.label} หมดอายุ ${formatThai(args.expiry)}`
+    ),
+  ];
+}
+
+/* ============================================================
+ * ฉาก 02b — อ่านไม่ออก
+ * ห้ามให้ผู้ใช้พิมพ์วันที่เป็นข้อความเด็ดขาด — ใช้ datetimepicker เท่านั้น
+ * คนไทยเขียนวันที่ได้ไม่ต่ำกว่า 8 แบบ และสลับ พ.ศ./ค.ศ. ตลอด
+ * ============================================================ */
+export function askDate(args: { typeKey?: string; documentId?: string; reason?: 'ocr_miss' | 'edit' | 'manual' }): LineMessage[] {
+  const body =
+    args.reason === 'edit'
+      ? 'ได้ครับ เอกสารนี้หมดอายุวันไหนครับ'
+      : args.reason === 'manual'
+      ? 'ได้ครับ เอกสารนี้หมดอายุวันไหนครับ'
+      : 'รูปไม่ค่อยชัดครับ 😅\nไม่เป็นไร บอกผมตรง ๆ ก็ได้\n\nเอกสารนี้หมดอายุวันไหนครับ';
+
+  const data = pb('setdate', {
+    ...(args.documentId ? { d: args.documentId } : {}),
+    ...(args.typeKey ? { k: args.typeKey } : {}),
+  });
+
+  return [
+    text(body, chips([
+      { label: '📅 เลือกวันที่', data, date: true },
+      { label: '📸 ถ่ายใหม่', camera: true },
+    ])),
+  ];
+}
+
+/** ถามว่าเอกสารประเภทไหน (ตอน OCR ไม่รู้ประเภท หรือผู้ใช้เลือกเอง) */
+export function askType(): LineMessage[] {
+  const opts: DocType[] = ['vehicle_tax', 'cmi', 'motor_insurance', 'driving_license', 'passport', 'custom'].map(docType);
+  return [
+    text(
+      'เอกสารประเภทไหนครับ',
+      chips(opts.map((t) => ({ label: `${t.emoji} ${t.label}`, data: pb('type', { k: t.key }) })))
+    ),
+  ];
+}
+
+/* ============================================================
+ * ฉาก 03 — ยืนยันแล้ว ประกาศสัญญาเป็นตัวเลข แล้วดันใบที่ 2
+ *
+ * "ผมจะเตือนคุณ N ครั้ง" + วันที่จริง คือข้อความที่ทำให้เขาไม่บล็อก
+ * เขาเห็นสัญญาที่ตรวจสอบได้ ไม่ใช่คำโฆษณา
+ * ============================================================ */
+export function savedAndSuggestMore(args: {
+  typeKey: string;
+  reminderDates: Array<{ send_on: ISODate; offset_days: number }>;
+  docCount: number;
+}): LineMessage[] {
+  const upcoming = args.reminderDates.filter((r) => r.offset_days < 0);
+  const lines = upcoming.map((r) => {
+    const when =
+      r.offset_days <= -60 ? 'วันแรกที่ต่อได้'
+      : `เหลือ ${Math.abs(r.offset_days)} วัน`;
+    return `📅 ${formatThai(r.send_on)} — ${when}`;
+  });
+
+  const head =
+    upcoming.length > 0
+      ? `บันทึกแล้วครับ ✅\n\nผมจะเตือนคุณ ${upcoming.length} ครั้ง\n${lines.join('\n')}\n\nลืมได้เลยครับ ผมจำให้แล้ว`
+      : 'บันทึกแล้วครับ ✅\nผมจะเตือนเมื่อใกล้ครบกำหนดครับ';
+
+  const out: LineMessage[] = [text(head)];
+
+  if (args.docCount >= 3) {
+    // ฉาก 04 — สัญญาว่าจะเงียบ
+    const next = upcoming[0];
+    out.push(
+      text(
+        `เยี่ยมครับ ตอนนี้ผมดูให้ ${args.docCount} รายการ 🎉\n\n` +
+          (next ? `ครั้งต่อไปที่คุณจะได้ยินจากผม\nคือ ${formatThai(next.send_on)}\n\n` : '') +
+          'ระหว่างนี้ผมจะเงียบครับ 🤫',
+        chips([{ label: '📋 ดูรายการทั้งหมด', data: pb('list') }])
+      )
+    );
+  } else {
+    const suggest = SUGGEST_AFTER_FIRST.filter((k) => k !== args.typeKey).slice(0, 3).map(docType);
+    out.push(
+      text(
+        'มีอีกไหมครับ รถคันเดียวมักมีหลายใบ',
+        chips([
+          ...suggest.map((t) => ({ label: `${t.emoji} ${t.label}`, data: pb('type', { k: t.key }) })),
+          { label: 'ยังก่อน', data: pb('later') },
+        ])
+      )
+    );
+  }
+  return out;
+}
+
+/* ============================================================
+ * ฉาก 06 / 07 — การเตือนล่วงหน้า (PUSH)
+ *
+ * กฎข้อ 4 บังคับที่นี่: รับ items เป็น "รายการ" เสมอ ไม่ใช่ทีละใบ
+ * ถ้าภาษีรถกับ พ.ร.บ. หมดวันเดียวกัน ต้องเป็นข้อความเดียว
+ * ============================================================ */
+export interface ReminderItem {
+  documentId: string;
+  typeKey: string;
+  label?: string | null;
+  expiry: ISODate;
+  offsetDays: number;
+}
+
+export function upcomingReminder(items: ReminderItem[], today: ISODate): LineMessage[] {
+  if (items.length === 0) return [];
+
+  const soonest = items.reduce((a, b) => (a.expiry <= b.expiry ? a : b));
+  const t = docType(soonest.typeKey);
+  const early = soonest.offsetDays <= -60;
+  const urgent = soonest.offsetDays > -14;
+
+  const header = early
+    ? `${t.emoji} ${t.label}${soonest.label ? ` ${soonest.label}` : ''}\nต่อได้ตั้งแต่วันนี้แล้วครับ`
+    : `${urgent ? '⚠️' : '🔔'} ${items.length > 1 ? 'มี ' + items.length + ' รายการใกล้ครบกำหนด' : displayName(soonest.typeKey, soonest.label)}`;
+
+  const rows = items.map((it) => ({
+    type: 'box', layout: 'vertical', spacing: 'xs',
+    contents: [
+      { type: 'text', text: displayName(it.typeKey, it.label), size: 'sm', weight: 'bold', wrap: true },
+      {
+        type: 'box', layout: 'horizontal',
+        contents: [
+          { type: 'text', text: formatThai(it.expiry), size: 'xs', color: MUTED, flex: 3 },
+          { type: 'text', text: humanRemaining(today, it.expiry), size: 'xs',
+            color: it.offsetDays > -14 ? WARN : MUTED, align: 'end', flex: 2 },
+        ],
+      },
+    ],
+  })) as LineMessage[];
+
+  const upsellType = items.map((i) => docType(i.typeKey)).find((t2) => t2.tier === 1 && t2.upsell);
+  const footer: LineMessage[] = [];
+  if (upsellType?.upsell) {
+    const priceSuffix = upsellType.upsell.price ? ` · ${upsellType.upsell.price}฿` : '';
+    footer.push(button(`🛵 ${upsellType.upsell.label}${priceSuffix}`, pb('upsell', { d: soonest.documentId }), 'primary'));
+  }
+  footer.push(button('✅ ต่อเองแล้ว', pb('renewed', { d: soonest.documentId })));
+  if (items.length > 1) footer.push(button('📋 ดูทั้งหมด', pb('list')));
+
+  return [
+    bubble(
+      [
+        { type: 'text', text: header, weight: 'bold', size: 'md', wrap: true },
+        ...(early && t.renewWindowDays
+          ? [{ type: 'text', text: 'ต่อตอนนี้ไม่มีค่าปรับ และไม่ต้องรีบ', size: 'xs', color: MUTED, wrap: true }]
+          : []),
+        { type: 'separator', margin: 'md' },
+        { type: 'box', layout: 'vertical', spacing: 'md', margin: 'md', contents: rows },
+      ],
+      footer,
+      `เตือน: ${displayName(soonest.typeKey, soonest.label)} ${humanRemaining(today, soonest.expiry)}`
+    ),
+  ];
+}
+
+/* ============================================================
+ * ฉาก 08 — D+1 วงจรที่ทำให้ข้อมูลสดเอง
+ *
+ * ฉากนี้คือสิ่งที่ทำให้ฐานข้อมูลไม่ตายภายในหนึ่งรอบปี
+ * ผู้ใช้กดปุ่มเดียว เอกสารต่ออายุตัวเองในระบบ
+ * ============================================================ */
+export function dueReminder(items: ReminderItem[]): LineMessage[] {
+  if (items.length === 0) return [];
+  const first = items[0];
+
+  if (items.length === 1) {
+    return [
+      text(
+        `${displayName(first.typeKey, first.label)} ครบกำหนดเมื่อวานครับ\nต่อเรียบร้อยหรือยังครับ`,
+        chips([
+          { label: '✅ ต่อแล้ว', data: pb('renewed', { d: first.documentId }) },
+          { label: 'ยังเลย ช่วยที', data: pb('upsell', { d: first.documentId }) },
+          { label: 'ไม่ได้ใช้แล้ว', data: pb('archive', { d: first.documentId }) },
+        ])
+      ),
+    ];
+  }
+
+  const rows = items.slice(0, 4).map((it) => ({
+    type: 'box', layout: 'vertical', spacing: 'xs', margin: 'md',
+    contents: [
+      { type: 'text', text: displayName(it.typeKey, it.label), size: 'sm', weight: 'bold', wrap: true },
+      { type: 'text', text: `ครบกำหนด ${formatThai(it.expiry)}`, size: 'xs', color: MUTED },
+      button('✅ ต่อแล้ว', pb('renewed', { d: it.documentId })),
+    ],
+  })) as LineMessage[];
+
+  return [
+    bubble(
+      [
+        { type: 'text', text: `มี ${items.length} รายการครบกำหนดแล้วครับ`, weight: 'bold', size: 'md', wrap: true },
+        { type: 'text', text: 'ต่อเรียบร้อยหรือยังครับ', size: 'sm', color: MUTED },
+        { type: 'separator', margin: 'md' },
+        ...rows,
+      ],
+      items.length > 4 ? [button('📋 ดูทั้งหมด', pb('list'))] : undefined,
+      'มีเอกสารครบกำหนดแล้ว'
+    ),
+  ];
+}
+
+/** ตอบหลังกด "ต่อแล้ว" — เจอกันอีกทีปีหน้า */
+export function rolledOver(typeKey: string, label: string | null | undefined, newExpiry: ISODate): LineMessage[] {
+  return [
+    text(
+      `เยี่ยมครับ ✅\nผมเลื่อนไปเป็น ${formatThai(newExpiry)} ให้แล้ว\n\nเจอกันอีกทีครับ 👋`
+    ),
+  ];
+}
+
+/* ============================================================
+ * ฉาก 09 — ให้เราต่อให้
+ * v1 ทำมือ 20 เคสแรก ไม่ต้องมีระบบ
+ * ============================================================ */
+export function upsellIntro(typeKey: string): LineMessage[] {
+  const t = docType(typeKey);
+  const price = t.upsell?.price;
+  return [
+    text(
+      'ยินดีครับ 🛵\nขอ 3 อย่างนี้ครับ\n\n' +
+        '1. รูปเล่มทะเบียน หน้าที่มีเลขตัวถัง\n' +
+        '2. ที่อยู่จัดส่งป้ายภาษี\n' +
+        '3. เบอร์โทรติดต่อ\n\n' +
+        (price ? `ค่าบริการ ${price} บาท\n(ค่าภาษีจริงแจ้งอีกทีหลังคำนวณ)\n` : '') +
+        'เสร็จภายใน 3 วันทำการ',
+      chips([
+        { label: '📤 ส่งข้อมูล', data: pb('upsell_start', { k: typeKey }) },
+        { label: '💬 ขอถามก่อน', data: pb('human') },
+      ])
+    ),
+  ];
+}
+
+/* ============================================================
+ * ฉาก 11 — กรณีขอบ
+ * ============================================================ */
+export function notADocument(): LineMessage[] {
+  return [
+    text(
+      'อันนี้ผมอ่านไม่ออกครับ 😅\nส่งรูปเอกสารที่มีวันหมดอายุมาได้เลย',
+      chips([
+        { label: '📸 ถ่ายใหม่', camera: true },
+        { label: '📅 พิมพ์วันที่เอง', data: pb('manual') },
+      ])
+    ),
+  ];
+}
+
+export function confirmDelete(docCount: number): LineMessage[] {
+  return [
+    text(
+      `ได้ครับ ผมจะลบเอกสารทั้ง ${docCount} รายการ\nและรูปที่เคยส่งมาทั้งหมดถาวร\n\nยืนยันไหมครับ`,
+      chips([
+        { label: 'ยืนยันลบ', data: pb('delete_confirm') },
+        { label: 'ยกเลิก', data: pb('cancel') },
+      ])
+    ),
+  ];
+}
+
+export function deleted(): LineMessage[] {
+  return [text('ลบข้อมูลทั้งหมดเรียบร้อยแล้วครับ\nขอบคุณที่เคยให้ผมดูแลนะครับ 🙏')];
+}
+
+export function archived(): LineMessage[] {
+  return [text('รับทราบครับ ผมจะไม่เตือนรายการนี้อีก ✅')];
+}
+
+export function toHuman(): LineMessage[] {
+  return [text('ผมส่งข้อความให้ทีมงานแล้วครับ\nเดี๋ยวมีคนตอบกลับมานะครับ 🙏')];
+}
+
+/** ปุ่มเปิด LIFF — ใช้ใน rich menu เป็นหลัก */
+export function listLink(liffUrl: string): LineMessage[] {
+  return [
+    {
+      type: 'text',
+      text: 'เปิดดูรายการทั้งหมดได้ที่นี่ครับ',
+      quickReply: {
+        items: [{ type: 'action', action: { type: 'uri', label: '📋 รายการของฉัน', uri: liffUrl } }],
+      },
+    },
+  ];
+}
+
+export function fallback(): LineMessage[] {
+  return [
+    text(
+      'ผมช่วยจำวันหมดอายุเอกสารให้ครับ\nส่งรูปเอกสารมาได้เลย',
+      chips([
+        { label: '📸 ส่งรูปเอกสาร', camera: true },
+        { label: '📋 รายการของฉัน', data: pb('list') },
+        { label: '💬 คุยกับคน', data: pb('human') },
+      ])
+    ),
+  ];
+}

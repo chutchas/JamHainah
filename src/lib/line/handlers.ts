@@ -1,0 +1,275 @@
+/**
+ * ตัวจัดการ event ทั้งหมดจาก LINE
+ *
+ * ⚠️ ทุกฟังก์ชันในไฟล์นี้ตอบด้วย reply() เท่านั้น (ฟรี)
+ *    ห้าม import push จากที่นี่ — มี test บังคับไว้
+ */
+import { reply, getProfile, getMessageContent, showLoading } from './client';
+import * as M from './messages';
+import { ocr, CONFIDENCE_FLOOR } from '@/lib/ocr';
+import { docType } from '@/lib/domain/docTypes';
+import { isISODate, todayInBangkok } from '@/lib/domain/thaiDate';
+import { rolloverExpiry } from '@/lib/domain/reminders';
+import * as repo from '@/lib/db/repo';
+
+type Ev = Record<string, any>;
+
+export async function handleEvent(ev: Ev): Promise<void> {
+  const userId: string | undefined = ev.source?.userId;
+  if (!userId) return;
+
+  switch (ev.type) {
+    case 'follow':      return onFollow(ev, userId);
+    case 'unfollow':    return void repo.markUnfollowed(userId);
+    case 'message':     return onMessage(ev, userId);
+    case 'postback':    return onPostback(ev, userId);
+    default:            return;
+  }
+}
+
+/* ---------------- ฉาก 01 ---------------- */
+
+async function onFollow(ev: Ev, userId: string) {
+  const profile = await getProfile(userId);
+  await repo.upsertUser(userId, profile?.displayName);
+  await repo.attachShopAttribution(userId);
+  await repo.track('follow', userId);
+  await reply(ev.replyToken, M.greeting());
+}
+
+/* ---------------- ข้อความ ---------------- */
+
+async function onMessage(ev: Ev, userId: string) {
+  await repo.upsertUser(userId);
+  const msg = ev.message;
+
+  if (msg?.type === 'image') return onImage(ev, userId, msg.id);
+
+  if (msg?.type === 'text') {
+    const t = String(msg.text ?? '').trim();
+
+    // PDPA — ต้องทำงานได้จริงตั้งแต่ v1
+    if (/ลบ.*(ข้อมูล|ทั้งหมด)|delete.*(my )?data/i.test(t)) {
+      const n = await repo.countDocuments(userId);
+      return reply(ev.replyToken, M.confirmDelete(n));
+    }
+    if (/รายการ|ดูทั้งหมด|list/i.test(t)) return replyList(ev.replyToken);
+    if (/คุยกับคน|แอดมิน|admin|help/i.test(t)) {
+      await repo.track('to_human', userId, { text: t.slice(0, 200) });
+      return reply(ev.replyToken, M.toHuman());
+    }
+    await repo.track('text_unmatched', userId, { text: t.slice(0, 200) });
+    return reply(ev.replyToken, M.fallback());
+  }
+
+  return reply(ev.replyToken, M.fallback());
+}
+
+/* ---------------- ฉาก 02 / 02b ---------------- */
+
+async function onImage(ev: Ev, userId: string, messageId: string) {
+  const today = todayInBangkok();
+  const pending = await repo.getPending(userId);
+
+  await showLoading(userId, 25);
+
+  let extraction;
+  try {
+    const buf = await getMessageContent(messageId);
+    extraction = await ocr().extract(buf, 'image/jpeg');
+  } catch (err) {
+    await repo.track('ocr_error', userId, { message: String(err) });
+    return reply(ev.replyToken, M.askDate({ typeKey: pending.docTypeKey, reason: 'ocr_miss' }));
+  }
+
+  if (!extraction.isDocument) {
+    await repo.track('image_not_document', userId);
+    return reply(ev.replyToken, M.notADocument());
+  }
+
+  const typeKey = extraction.docTypeKey ?? pending.docTypeKey ?? null;
+
+  // อ่านไม่ชัด หรือไม่มีวันที่ — ไม่เดา ไปถามตรง ๆ (ฉาก 02b)
+  if (!extraction.expiryDate || extraction.confidence < CONFIDENCE_FLOOR) {
+    await repo.track('ocr_miss', userId, { confidence: extraction.confidence, typeKey });
+    await repo.setPending(userId, { awaiting: 'date', docTypeKey: typeKey ?? undefined, at: new Date().toISOString() });
+    if (!typeKey) return reply(ev.replyToken, M.askType());
+    return reply(ev.replyToken, M.askDate({ typeKey, reason: 'ocr_miss' }));
+  }
+
+  if (!typeKey) {
+    await repo.setPending(userId, { awaiting: 'date', at: new Date().toISOString() });
+    return reply(ev.replyToken, M.askType());
+  }
+
+  const doc = await repo.createDocument({
+    lineUserId: userId,
+    docTypeKey: typeKey,
+    label: extraction.label,
+    expiryDate: extraction.expiryDate,
+    confirmed: false,
+    source: 'ocr',
+    meta: { ocr_confidence: extraction.confidence },
+  });
+
+  await repo.setPending(userId, null);
+  await repo.track('ocr_hit', userId, { typeKey, confidence: extraction.confidence });
+
+  return reply(
+    ev.replyToken,
+    M.confirmExtracted({ documentId: doc.id, typeKey, label: doc.label, expiry: doc.expiry_date, today })
+  );
+}
+
+/* ---------------- ปุ่มทั้งหมด ---------------- */
+
+async function onPostback(ev: Ev, userId: string) {
+  await repo.upsertUser(userId);
+  const params = new URLSearchParams(ev.postback?.data ?? '');
+  const action = params.get('a');
+  const docId = params.get('d');
+  const typeKey = params.get('k');
+  const today = todayInBangkok();
+
+  switch (action) {
+    /* ---- ฉาก 02 → 03 : ยืนยันว่าถูกต้อง ---- */
+    case 'confirm': {
+      if (!docId) return;
+      const doc = await repo.getDocument(docId);
+      if (!doc) return reply(ev.replyToken, M.fallback());
+
+      await repo.updateDocument(doc.id, { confirmed_by_user: true });
+      const rows = await repo.regenerateReminders(doc, today);
+      const count = await repo.countDocuments(userId);
+      await repo.track('doc_confirmed', userId, { typeKey: doc.doc_type, docCount: count });
+
+      return reply(ev.replyToken, M.savedAndSuggestMore({ typeKey: doc.doc_type, reminderDates: rows, docCount: count }));
+    }
+
+    /* ---- ผู้ใช้กด "แก้ไขวันที่" = ตัวอย่างที่โมเดลอ่านพลาด (ของมีค่า) ---- */
+    case 'edit': {
+      if (!docId) return;
+      await repo.track('ocr_corrected', userId, { documentId: docId });
+      await repo.setPending(userId, { awaiting: 'date', documentId: docId, at: new Date().toISOString() });
+      return reply(ev.replyToken, M.askDate({ documentId: docId, reason: 'edit' }));
+    }
+
+    /* ---- datetimepicker ส่งวันที่กลับมาเป็น ISO เสมอ ---- */
+    case 'setdate': {
+      const picked = ev.postback?.params?.date as string | undefined;
+      if (!picked || !isISODate(picked)) return reply(ev.replyToken, M.askDate({ reason: 'manual' }));
+
+      const pending = await repo.getPending(userId);
+      const targetDocId = docId ?? pending.documentId;
+      const key = typeKey ?? pending.docTypeKey ?? 'custom';
+
+      let doc;
+      if (targetDocId) {
+        await repo.updateDocument(targetDocId, { expiry_date: picked, confirmed_by_user: true, source: 'manual' });
+        doc = await repo.getDocument(targetDocId);
+      } else {
+        doc = await repo.createDocument({
+          lineUserId: userId, docTypeKey: key, expiryDate: picked, confirmed: true, source: 'manual',
+        });
+      }
+      if (!doc) return reply(ev.replyToken, M.fallback());
+
+      const rows = await repo.regenerateReminders(doc, today);
+      const count = await repo.countDocuments(userId);
+      await repo.setPending(userId, null);
+      await repo.track('doc_confirmed', userId, { typeKey: doc.doc_type, docCount: count, source: 'manual' });
+
+      return reply(ev.replyToken, M.savedAndSuggestMore({ typeKey: doc.doc_type, reminderDates: rows, docCount: count }));
+    }
+
+    /* ---- เลือกประเภทเอกสารจากชิป ---- */
+    case 'type': {
+      if (!typeKey) return;
+      const t = docType(typeKey);
+      await repo.setPending(userId, { awaiting: t.ocr ? 'image' : 'date', docTypeKey: typeKey, at: new Date().toISOString() });
+      if (!t.ocr) return reply(ev.replyToken, M.askDate({ typeKey, reason: 'manual' }));
+      return reply(ev.replyToken, [
+        {
+          type: 'text',
+          text: `ได้ครับ ${t.emoji} ${t.label}\n${t.hint ?? 'ถ่ายรูปหน้าที่มีวันหมดอายุมาได้เลย'}`,
+          quickReply: {
+            items: [
+              { type: 'action', action: { type: 'camera', label: '📸 ถ่ายรูป' } },
+              { type: 'action', action: { type: 'datetimepicker', label: '📅 พิมพ์วันที่เอง', data: M.pb('setdate', { k: typeKey }), mode: 'date' } },
+            ],
+          },
+        },
+      ]);
+    }
+
+    case 'manual':
+      return reply(ev.replyToken, M.askType());
+
+    /* ---- ฉาก 08 : "ต่อแล้ว" — เอกสารต่ออายุตัวเองในฐานข้อมูล ---- */
+    case 'renewed': {
+      if (!docId) return;
+      const doc = await repo.getDocument(docId);
+      if (!doc) return reply(ev.replyToken, M.fallback());
+
+      const next = rolloverExpiry({ docTypeKey: doc.doc_type, currentExpiry: doc.expiry_date, today });
+      if (!next) {
+        // ไม่รู้อายุปกติของเอกสารประเภทนี้ ต้องถาม
+        await repo.setPending(userId, { awaiting: 'date', documentId: doc.id, at: new Date().toISOString() });
+        return reply(ev.replyToken, M.askDate({ documentId: doc.id, reason: 'edit' }));
+      }
+
+      await repo.updateDocument(doc.id, { expiry_date: next, renewed_count: doc.renewed_count + 1 });
+      const fresh = await repo.getDocument(doc.id);
+      if (fresh) await repo.regenerateReminders(fresh, today);
+      await repo.track('renewed_self', userId, { typeKey: doc.doc_type, newExpiry: next });
+
+      return reply(ev.replyToken, M.rolledOver(doc.doc_type, doc.label, next));
+    }
+
+    case 'archive': {
+      if (!docId) return;
+      await repo.archiveDocument(docId);
+      await repo.track('doc_archived', userId, { documentId: docId });
+      return reply(ev.replyToken, M.archived());
+    }
+
+    /* ---- ฉาก 09 : ขา B — ที่เดียวที่เก็บเงินได้จริง ---- */
+    case 'upsell': {
+      const doc = docId ? await repo.getDocument(docId) : null;
+      await repo.track('upsell_clicked', userId, { typeKey: doc?.doc_type ?? null, documentId: docId });
+      return reply(ev.replyToken, M.upsellIntro(doc?.doc_type ?? 'vehicle_tax'));
+    }
+
+    case 'upsell_start': {
+      await repo.track('upsell_started', userId, { typeKey });
+      return reply(ev.replyToken, M.toHuman());
+    }
+
+    case 'list':
+      return replyList(ev.replyToken);
+
+    case 'human':
+      await repo.track('to_human', userId);
+      return reply(ev.replyToken, M.toHuman());
+
+    case 'delete_confirm':
+      await repo.hardDeleteUser(userId);
+      await repo.track('data_deleted', userId);
+      return reply(ev.replyToken, M.deleted());
+
+    case 'later':
+      return reply(ev.replyToken, [{ type: 'text', text: 'ได้ครับ ส่งมาเมื่อไหร่ก็ได้ 👍' }]);
+
+    case 'cancel':
+      return reply(ev.replyToken, [{ type: 'text', text: 'ยกเลิกแล้วครับ' }]);
+
+    default:
+      return reply(ev.replyToken, M.fallback());
+  }
+}
+
+function replyList(replyToken: string) {
+  const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
+  const url = liffId ? `https://liff.line.me/${liffId}` : `${process.env.NEXT_PUBLIC_BASE_URL}/liff`;
+  return reply(replyToken, M.listLink(url));
+}
