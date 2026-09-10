@@ -99,3 +99,48 @@ export function urgencyOf(offsetDays: number): 'early' | 'soon' | 'urgent' | 'ov
   if (offsetDays <= -14) return 'soon';
   return 'urgent';
 }
+
+
+/* ============================================================
+ * วันหมดอายุเปลี่ยนไป แปลว่าอะไร
+ * ============================================================
+ *
+ * เอกสารใบเดิมแต่วันไม่ตรง เป็นได้ 3 อย่าง และแยกให้ออกสำคัญมาก
+ * เพราะ renewed_count เป็นตัวเลขทางธุรกิจ (v_shop_performance ใช้วัดว่า
+ * ร้านไหนส่งลูกค้ากลับมาต่ออายุได้จริง) — นับการแก้คำผิดเป็นการต่ออายุ
+ * ตัวเลขที่เอาไปคุยกับร้านจะเพี้ยนทันที
+ */
+
+/** ต่างกันไม่เกินนี้ = แก้วันที่ที่เคยบันทึกผิด ไม่ใช่ต่ออายุ */
+export const CORRECTION_WINDOW_DAYS = 45;
+/** รู้อายุปกติของเอกสาร: ต่างกันตั้งแต่สัดส่วนนี้ของหนึ่งรอบ = ต่ออายุ */
+export const RENEWAL_RATIO = 0.7;
+/** ไม่รู้อายุปกติ: ใช้เกณฑ์นี้แทน */
+export const RENEWAL_MIN_DAYS = 180;
+
+export type ExpiryChange = 'same' | 'correction' | 'renewal' | 'unclear';
+
+export function classifyExpiryChange(args: {
+  docTypeKey: string;
+  from: ISODate;
+  to: ISODate;
+}): ExpiryChange {
+  const gap = daysBetween(args.from, args.to);
+  if (gap === 0) return 'same';
+
+  // วันใหม่ย้อนหลังกว่าเดิม — ต่ออายุถอยหลังไม่ได้ ต้องเป็นการแก้
+  if (gap < 0) return 'correction';
+
+  // ขยับไม่กี่วัน/ไม่กี่สัปดาห์ — OCR อ่านเลขผิดตัวเดียวก็เป็นแบบนี้ได้
+  if (gap <= CORRECTION_WINDOW_DAYS) return 'correction';
+
+  const term = docType(args.docTypeKey).termMonths;
+  if (term) {
+    const expected = term * 30.44;
+    if (gap >= expected * RENEWAL_RATIO) return 'renewal';
+    // ห่างเกินกว่าจะเป็นคำผิด แต่ไม่ถึงหนึ่งรอบ — เดาไม่ได้
+    return 'unclear';
+  }
+
+  return gap >= RENEWAL_MIN_DAYS ? 'renewal' : 'unclear';
+}

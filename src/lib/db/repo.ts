@@ -1,5 +1,5 @@
 import { db } from './client';
-import { computeReminders } from '@/lib/domain/reminders';
+import { computeReminders, classifyExpiryChange } from '@/lib/domain/reminders';
 import { docType as docTypeOf } from '@/lib/domain/docTypes';
 import type { ISODate } from '@/lib/domain/thaiDate';
 
@@ -109,7 +109,8 @@ export async function createDocument(args: {
 }
 
 /** ผลการเทียบกับเอกสารที่มีอยู่แล้ว */
-export type MatchKind = 'none' | 'duplicate' | 'renewal' | 'ambiguous';
+export type MatchKind = 'none' | 'duplicate' | 'renewal' | 'correction' | 'ambiguous';
+export type AmbiguousReason = 'no_label' | 'unclear_gap';
 
 const normLabel = (v?: string | null) =>
   (v ?? '').replace(/[\s\-.]/g, '').toLowerCase();
@@ -130,7 +131,7 @@ export async function resolveExisting(args: {
   docTypeKey: string;
   label?: string | null;
   expiryDate: ISODate;
-}): Promise<{ kind: MatchKind; doc?: DocumentRow }> {
+}): Promise<{ kind: MatchKind; doc?: DocumentRow; reason?: AmbiguousReason }> {
   const { data } = await db()
     .from('documents')
     .select('*')
@@ -143,10 +144,17 @@ export async function resolveExisting(args: {
   if (rows.length === 0) return { kind: 'none' };
 
   const type = docTypeOf(args.docTypeKey);
-  const verdict = (doc: DocumentRow): { kind: MatchKind; doc: DocumentRow } => ({
-    kind: doc.expiry_date === args.expiryDate ? 'duplicate' : 'renewal',
-    doc,
-  });
+  const verdict = (doc: DocumentRow): { kind: MatchKind; doc: DocumentRow; reason?: AmbiguousReason } => {
+    const change = classifyExpiryChange({
+      docTypeKey: args.docTypeKey,
+      from: doc.expiry_date,
+      to: args.expiryDate,
+    });
+    if (change === 'same') return { kind: 'duplicate', doc };
+    if (change === 'correction') return { kind: 'correction', doc };
+    if (change === 'renewal') return { kind: 'renewal', doc };
+    return { kind: 'ambiguous', doc, reason: 'unclear_gap' };
+  };
 
   // คนหนึ่งมีใบเดียว — ไม่ต้องดูเลขอะไรทั้งนั้น
   if (type.singleton) return verdict(rows[0]);
@@ -164,7 +172,7 @@ export async function resolveExisting(args: {
   if (sameDate) return { kind: 'duplicate', doc: sameDate };
 
   // มีใบของประเภทนี้อยู่ใบเดียว วันไม่ตรง — ต่ออายุ หรือคนละคัน? เดาไม่ได้
-  if (rows.length === 1) return { kind: 'ambiguous', doc: rows[0] };
+  if (rows.length === 1) return { kind: 'ambiguous', doc: rows[0], reason: 'no_label' };
 
   return { kind: 'none' };
 }

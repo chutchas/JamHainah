@@ -267,6 +267,25 @@ async function onPostback(ev: Ev, userId: string) {
       );
     }
 
+    /* ---- ตอบว่าครั้งก่อนอ่านผิด — แก้วัน แต่ไม่นับเป็นการต่ออายุ ---- */
+    case 'fix_date': {
+      const pend = await repo.getPending(userId);
+      const target = docId ?? pend.documentId;
+      if (!target || !pend.expiryDate || !isISODate(pend.expiryDate)) return reply(ev.replyToken, M.fallback());
+      const doc = await repo.getDocument(target);
+      if (!doc) return reply(ev.replyToken, M.fallback());
+
+      const from = doc.expiry_date;
+      await repo.updateDocument(doc.id, { expiry_date: pend.expiryDate, confirmed_by_user: true });
+      const fresh = await repo.getDocument(doc.id);
+      const rows = fresh ? await repo.regenerateReminders(fresh, today) : [];
+      await repo.setPending(userId, null);
+      await repo.track('date_corrected', userId, { typeKey: doc.doc_type, from, to: pend.expiryDate, via: 'asked' });
+      return reply(ev.replyToken, M.correctedDate({
+        typeKey: doc.doc_type, label: doc.label, from, to: pend.expiryDate, reminderDates: rows,
+      }));
+    }
+
     /* ---- ตอบว่าเป็นคนละใบ (รถอีกคัน) ---- */
     case 'as_new': {
       const pend = await repo.getPending(userId);
@@ -368,7 +387,7 @@ async function handleExisting(args: {
   expiryDate: string;
   today: string;
 }): Promise<boolean> {
-  const { kind, doc } = await repo.resolveExisting({
+  const { kind, doc, reason } = await repo.resolveExisting({
     lineUserId: args.userId,
     docTypeKey: args.typeKey,
     label: args.label,
@@ -384,22 +403,31 @@ async function handleExisting(args: {
     return true;
   }
 
-  if (kind === 'renewal') {
+  if (kind === 'renewal' || kind === 'correction') {
     const from = doc.expiry_date;
     await repo.updateDocument(doc.id, {
       expiry_date: args.expiryDate,
       label: doc.label ?? args.label ?? null,
-      renewed_count: doc.renewed_count + 1,
+      // นับเป็นการต่ออายุเฉพาะตอนที่เป็นการต่ออายุจริง
+      // การแก้วันที่ที่อ่านผิดต้องไม่ไปโป่งตัวเลขของร้าน
+      ...(kind === 'renewal' ? { renewed_count: doc.renewed_count + 1 } : {}),
       confirmed_by_user: true,
     });
     const fresh = await repo.getDocument(doc.id);
     const rows = fresh ? await repo.regenerateReminders(fresh, args.today) : [];
     await repo.setPending(args.userId, null);
-    await repo.track('renewed_by_new_copy', args.userId, { typeKey: args.typeKey, from, to: args.expiryDate });
-    await reply(
-      args.replyToken,
-      M.renewedFromNewCopy({ typeKey: doc.doc_type, label: doc.label ?? args.label, from, to: args.expiryDate, reminderDates: rows })
-    );
+
+    if (kind === 'renewal') {
+      await repo.track('renewed_by_new_copy', args.userId, { typeKey: args.typeKey, from, to: args.expiryDate });
+      await reply(args.replyToken, M.renewedFromNewCopy({
+        typeKey: doc.doc_type, label: doc.label ?? args.label, from, to: args.expiryDate, reminderDates: rows,
+      }));
+    } else {
+      await repo.track('date_corrected', args.userId, { typeKey: args.typeKey, from, to: args.expiryDate });
+      await reply(args.replyToken, M.correctedDate({
+        typeKey: doc.doc_type, label: doc.label ?? args.label, from, to: args.expiryDate, reminderDates: rows,
+      }));
+    }
     return true;
   }
 
@@ -421,6 +449,7 @@ async function handleExisting(args: {
       existingLabel: doc.label,
       existingExpiry: doc.expiry_date,
       newExpiry: args.expiryDate,
+      reason,
     })
   );
   return true;

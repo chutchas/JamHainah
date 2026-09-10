@@ -181,6 +181,25 @@ export function renewedFromNewCopy(args: {
   ];
 }
 
+/** ขยับไม่กี่วัน = ครั้งก่อนอ่านผิด ไม่ใช่ต่ออายุ (ห้ามนับเป็น renewed_count) */
+export function correctedDate(args: {
+  typeKey: string;
+  label?: string | null;
+  from: ISODate;
+  to: ISODate;
+  reminderDates: Array<{ send_on: ISODate; offset_days: number }>;
+}): LineMessage[] {
+  const next = args.reminderDates.find((r) => r.offset_days < 0);
+  return [
+    text(
+      `ครั้งก่อนผมอ่านผิดไปนิดครับ 🙏\n${displayName(args.typeKey, args.label)}\n\n` +
+        `แก้จาก ${formatThai(args.from)}\nเป็น ${formatThai(args.to)} ให้แล้ว\n\n` +
+        (next ? `ครั้งต่อไปผมจะเตือน ${formatThai(next.send_on)} ครับ` : ''),
+      chips([{ label: '📋 ดูรายการทั้งหมด', data: pb('list') }])
+    ),
+  ];
+}
+
 /**
  * มีใบของประเภทนี้อยู่แล้ว แต่ไม่มีเลขให้เทียบ วันก็ไม่ตรง
  * เดาไม่ได้ว่าต่ออายุหรือคนละคัน — ต้องถาม
@@ -194,18 +213,29 @@ export function askRenewalOrNew(args: {
   existingLabel?: string | null;
   existingExpiry: ISODate;
   newExpiry: ISODate;
+  reason?: 'no_label' | 'unclear_gap';
 }): LineMessage[] {
+  const head =
+    `ผมมี ${displayName(args.typeKey, args.existingLabel)} อยู่แล้ว 1 ใบ\n` +
+    `หมดอายุ ${formatThai(args.existingExpiry)}\n\n` +
+    `ใบที่เพิ่งส่งมาหมดอายุ ${formatThai(args.newExpiry)}\n`;
+
+  // ห่างกันแปลก ๆ — ไม่ใกล้พอจะเป็นคำผิด ไม่ไกลพอจะเป็นรอบใหม่
+  if (args.reason === 'unclear_gap') {
+    return [
+      text(head + 'อันไหนถูกครับ', chips([
+        { label: '🔄 ต่ออายุแล้ว ใช้วันใหม่', data: pb('renew_existing', { d: args.existingId }) },
+        { label: '✏️ ครั้งก่อนอ่านผิด แก้เป็นวันใหม่', data: pb('fix_date', { d: args.existingId }) },
+        { label: '➕ คนละใบ', data: pb('as_new') },
+      ])),
+    ];
+  }
+
   return [
-    text(
-      `ผมมี ${displayName(args.typeKey, args.existingLabel)} อยู่แล้ว 1 ใบ\n` +
-        `หมดอายุ ${formatThai(args.existingExpiry)}\n\n` +
-        `ใบที่เพิ่งส่งมาหมดอายุ ${formatThai(args.newExpiry)}\n` +
-        `ใบนี้คืออันไหนครับ`,
-      chips([
-        { label: '🔄 ต่ออายุใบเดิม', data: pb('renew_existing', { d: args.existingId }) },
-        { label: '➕ คนละใบ/คนละคัน', data: pb('as_new') },
-      ])
-    ),
+    text(head + 'ใบนี้คืออันไหนครับ', chips([
+      { label: '🔄 ต่ออายุใบเดิม', data: pb('renew_existing', { d: args.existingId }) },
+      { label: '➕ คนละใบ/คนละคัน', data: pb('as_new') },
+    ])),
   ];
 }
 
