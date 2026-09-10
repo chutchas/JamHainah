@@ -9,6 +9,7 @@ import * as M from './messages';
 import { ocr, CONFIDENCE_FLOOR } from '@/lib/ocr';
 import { docType } from '@/lib/domain/docTypes';
 import { isISODate, todayInBangkok } from '@/lib/domain/thaiDate';
+import { env } from '@/lib/env';
 import { rolloverExpiry } from '@/lib/domain/reminders';
 import * as repo from '@/lib/db/repo';
 
@@ -269,7 +270,5 @@ async function onPostback(ev: Ev, userId: string) {
 }
 
 function replyList(replyToken: string) {
-  const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
-  const url = liffId ? `https://liff.line.me/${liffId}` : `${process.env.NEXT_PUBLIC_BASE_URL}/liff`;
-  return reply(replyToken, M.listLink(url));
+  return reply(replyToken, M.listLink(env.liffUrl));
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySignature } from '@/lib/line/signature';
 import { handleEvent } from '@/lib/line/handlers';
+import { reply } from '@/lib/line/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -26,10 +27,39 @@ export async function POST(req: NextRequest) {
   // จัดการทีละ event แต่ไม่ให้ event เดียวพังทั้งชุด
   await Promise.all(
     events.map(async (ev) => {
+      const e = ev as Record<string, any>;
+      const started = Date.now();
       try {
-        await handleEvent(ev as Record<string, unknown>);
+        await handleEvent(e);
+        console.log(`[webhook] ok type=${e?.type} ms=${Date.now() - started}`);
       } catch (err) {
-        console.error('[webhook] event failed', err);
+        // log ให้อ่านออกใน Vercel — ไม่เอา stack ยาว ๆ ที่หาอะไรไม่เจอ
+        console.error(
+          `[webhook] FAILED type=${e?.type} ms=${Date.now() - started} error=${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
+
+        // ผู้ใช้ต้องไม่เจอความเงียบ
+        // เงียบแปลว่าเขาไม่รู้ว่าควรลองใหม่ หรือแอปพัง หรือรออยู่
+        if (e?.replyToken) {
+          try {
+            await reply(e.replyToken, [
+              {
+                type: 'text',
+                text: 'ขออภัยครับ ระบบมีปัญหาชั่วคราว 🙏\nลองส่งใหม่อีกครั้งได้เลย',
+                quickReply: {
+                  items: [
+                    { type: 'action', action: { type: 'camera', label: '📸 ลองใหม่' } },
+                    { type: 'action', action: { type: 'postback', label: '💬 คุยกับคน', data: 'a=human', displayText: 'คุยกับคน' } },
+                  ],
+                },
+              },
+            ]);
+          } catch (replyErr) {
+            console.error('[webhook] fallback reply failed', replyErr);
+          }
+        }
       }
     })
   );

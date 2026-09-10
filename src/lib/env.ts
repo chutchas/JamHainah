@@ -23,6 +23,10 @@ export const env = {
     get model() { return opt('OPENAI_VISION_MODEL', 'gpt-4o'); },
   },
   get cronSecret() { return req('CRON_SECRET'); },
-  get baseUrl() { return opt('NEXT_PUBLIC_BASE_URL', 'http://localhost:3000'); },
-  get liffId() { return opt('NEXT_PUBLIC_LIFF_ID'); },
+  /**
+   * ต้องมีเสมอ — ไม่มี fallback
+   * ลิงก์ /liff แบบธรรมดาเปิดนอกแอป LINE ไม่ได้อยู่แล้ว (liff.init จะพัง)
+   * การส่งลิงก์เสียให้ผู้ใช้แย่กว่าการล้มดัง ๆ ตรงนี้
+   */
+  get liffUrl() { return `https://liff.line.me/${req('NEXT_PUBLIC_LIFF_ID')}`; },
 };
