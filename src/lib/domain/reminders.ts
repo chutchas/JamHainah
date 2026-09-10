@@ -66,7 +66,9 @@ export function computeReminders(args: {
       document_id: documentId,
       line_user_id: lineUserId,
       send_on: today,
-      offset_days: -daysLeft,
+      // หมดอายุวันนี้พอดี: -0 ใน JavaScript ไม่เท่ากับ 0 ตาม Object.is
+      // ปล่อยไว้จะกลายเป็นค่าที่เทียบไม่ตรงในโค้ดที่เช็ค offset_days === 0
+      offset_days: daysLeft === 0 ? 0 : -daysLeft,
       kind: 'upcoming',
     });
   }
