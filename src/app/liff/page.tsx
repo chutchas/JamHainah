@@ -74,8 +74,9 @@ export default function LiffPage() {
     return () => { cancelled = true; };
   }, [load]);
 
-  async function removeDoc(id: string) {
+  async function removeDoc(id: string, name: string) {
     if (!token) return;
+    if (!confirm(`ลบ ${name} ออกจากรายการ`)) return;
     const res = await fetch(`/api/liff/documents?id=${encodeURIComponent(id)}`, {
       method: 'DELETE', headers: { 'x-liff-id-token': token },
     });
@@ -109,12 +110,19 @@ export default function LiffPage() {
           </div>
         ) : (
           docs.map((d) => (
-            <div className="doc" key={d.id} onDoubleClick={() => removeDoc(d.id)}>
+            <div className="doc" key={d.id}>
               <span className="nm">{d.emoji} {d.typeLabel}{d.label ? ` · ${d.label}` : ''}</span>
               <span className="sb">หมดอายุ {d.expiryThai}</span>
               <span className={`days ${d.status}`}>
                 {d.days < 0 ? `เลย ${Math.abs(d.days)} วัน` : d.days === 0 ? 'วันนี้' : `เหลือ ${d.days} วัน`}
               </span>
+              <button
+                className="del"
+                aria-label={`ลบ ${d.typeLabel}`}
+                onClick={() => removeDoc(d.id, d.typeLabel)}
+              >
+                ลบ
+              </button>
             </div>
           ))
         )}
@@ -122,7 +130,7 @@ export default function LiffPage() {
 
       <div className="foot">
         <button className="btn danger" onClick={deleteEverything}>ลบข้อมูลของฉันทั้งหมด</button>
-        <p className="note">เราไม่เก็บรูปเอกสารของคุณ — ลบอัตโนมัติภายใน 30 วัน</p>
+        <p className="note">เราไม่เก็บรูปเอกสารของคุณ — อ่านวันหมดอายุแล้วทิ้งทันที</p>
       </div>
     </div>
   );

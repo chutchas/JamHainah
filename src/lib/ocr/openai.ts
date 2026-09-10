@@ -44,7 +44,13 @@ const SCHEMA = {
   properties: {
     isDocument: { type: 'boolean' },
     docTypeKey: { type: ['string', 'null'], enum: [...OCR_KEYS, null] },
-    label: { type: ['string', 'null'], description: 'เลขทะเบียนรถ เลขกรมธรรม์ หรือเลขเอกสาร' },
+    label: {
+      type: ['string', 'null'],
+      description:
+        'เลขที่ใช้แยกว่าเป็นเอกสารใบไหน เช่น เลขทะเบียนรถ "1กก 1234" หรือเลขกรมธรรม์ ' +
+        'ห้ามใส่ชื่อประเภทเอกสาร (เช่น "บัตรประจำตัวประชาชน" "ใบอนุญาตขับรถ") เพราะซ้ำกับ docTypeKey อยู่แล้ว ' +
+        'ถ้าไม่มีเลขที่ระบุตัวเอกสาร ให้เป็น null',
+    },
     expiryDate: { type: ['string', 'null'], description: 'YYYY-MM-DD เป็น ค.ศ.' },
     confidence: { type: 'number' },
     notes: { type: 'string', description: 'ข้อความบนเอกสารที่ใช้ตัดสินว่าเป็นวันสิ้นสุด' },

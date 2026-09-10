@@ -9,7 +9,7 @@
  *   5. บอกวันที่จริงเสมอ ห้าม "เร็ว ๆ นี้"
  *   6. ไม่มีคำว่า โปรโมชั่น / พิเศษ / ด่วน
  */
-import { ASK_TYPE_CHOICES, DocType, SUGGEST_AFTER_FIRST, displayName, docType } from '@/lib/domain/docTypes';
+import { ASK_TYPE_CHOICES, DocType, SUGGEST_BY_GROUP, displayName, docType } from '@/lib/domain/docTypes';
 import { ISODate, formatThai, humanRemaining } from '@/lib/domain/thaiDate';
 
 export type LineMessage = Record<string, unknown>;
@@ -144,6 +144,19 @@ export function confirmExtracted(args: {
   ];
 }
 
+/** เจอใบเดิมที่บันทึกไว้แล้ว — บอกตรง ๆ ดีกว่าเพิ่มซ้ำเงียบ ๆ */
+export function alreadyHave(typeKey: string, label: string | null | undefined, expiry: ISODate): LineMessage[] {
+  return [
+    text(
+      `${displayName(typeKey, label)} มีอยู่ในรายการแล้วครับ\nหมดอายุ ${formatThai(expiry)}\n\nผมจะไม่บันทึกซ้ำนะครับ`,
+      chips([
+        { label: '📋 ดูรายการทั้งหมด', data: pb('list') },
+        { label: '📸 เพิ่มใบอื่น', camera: true },
+      ])
+    ),
+  ];
+}
+
 /* ============================================================
  * ฉาก 02b — อ่านไม่ออก
  * ห้ามให้ผู้ใช้พิมพ์วันที่เป็นข้อความเด็ดขาด — ใช้ datetimepicker เท่านั้น
@@ -230,10 +243,12 @@ export function savedAndSuggestMore(args: {
       )
     );
   } else {
-    const suggest = SUGGEST_AFTER_FIRST.filter((k) => k !== args.typeKey).slice(0, 3).map(docType);
+    // ชวนเพิ่มให้เข้ากับสิ่งที่เพิ่งบันทึก — บันทึกบัตรประชาชนแล้วพูดเรื่องรถ คนจะงง
+    const group = SUGGEST_BY_GROUP[docType(args.typeKey).group];
+    const suggest = group.keys.filter((k) => k !== args.typeKey).slice(0, 3).map(docType);
     out.push(
       text(
-        'มีอีกไหมครับ รถคันเดียวมักมีหลายใบ',
+        group.prompt,
         chips([
           ...suggest.map((t) => ({ label: `${t.emoji} ${t.label}`, data: pb('type', { k: t.key }) })),
           { label: 'ยังก่อน', data: pb('later') },

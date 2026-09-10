@@ -107,6 +107,30 @@ export async function createDocument(args: {
   return data as DocumentRow;
 }
 
+/**
+ * หาเอกสารใบเดิมที่ผู้ใช้เคยบันทึกไว้แล้ว
+ *
+ * คนส่งรูปเดิมซ้ำเป็นเรื่องปกติมาก (ส่งแล้วไม่แน่ใจว่าติดไหม เลยส่งอีก)
+ * ถ้าไม่กัน รายการจะรก แล้วเขาจะได้การเตือนซ้ำ 2-3 ครั้งในวันเดียวกัน
+ * ซึ่งเป็นเหตุผลอันดับหนึ่งที่คนบล็อก OA
+ */
+export async function findDuplicate(
+  lineUserId: string,
+  docTypeKey: string,
+  expiryDate: ISODate
+): Promise<DocumentRow | null> {
+  const { data } = await db()
+    .from('documents')
+    .select('*')
+    .eq('line_user_id', lineUserId)
+    .eq('doc_type', docTypeKey)
+    .eq('expiry_date', expiryDate)
+    .is('archived_at', null)
+    .limit(1)
+    .maybeSingle();
+  return (data as DocumentRow) ?? null;
+}
+
 export async function getDocument(id: string): Promise<DocumentRow | null> {
   const { data } = await db().from('documents').select('*').eq('id', id).maybeSingle();
   return (data as DocumentRow) ?? null;

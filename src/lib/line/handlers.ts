@@ -110,6 +110,13 @@ async function onImage(ev: Ev, userId: string, messageId: string) {
     return reply(ev.replyToken, M.askDate({ typeKey, reason: 'ocr_miss' }));
   }
 
+  const dup = await repo.findDuplicate(userId, typeKey, extraction.expiryDate);
+  if (dup) {
+    await repo.setPending(userId, null);
+    await repo.track('duplicate_skipped', userId, { typeKey });
+    return reply(ev.replyToken, M.alreadyHave(dup.doc_type, dup.label, dup.expiry_date));
+  }
+
   const doc = await repo.createDocument({
     lineUserId: userId,
     docTypeKey: typeKey,
@@ -199,6 +206,12 @@ async function onPostback(ev: Ev, userId: string) {
       // เราอ่านวันที่จากรูปได้แล้ว ขาดแค่ประเภท — พอเขาตอบก็จบเลย
       // ไม่ต้องให้ถ่ายรูปใหม่หรือเลือกวันที่ซ้ำ
       if (pendingType.expiryDate && isISODate(pendingType.expiryDate)) {
+        const dupByType = await repo.findDuplicate(userId, typeKey, pendingType.expiryDate);
+        if (dupByType) {
+          await repo.setPending(userId, null);
+          await repo.track('duplicate_skipped', userId, { typeKey, via: 'type_pick' });
+          return reply(ev.replyToken, M.alreadyHave(dupByType.doc_type, dupByType.label, dupByType.expiry_date));
+        }
         const doc = await repo.createDocument({
           lineUserId: userId,
           docTypeKey: typeKey,
