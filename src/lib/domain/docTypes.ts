@@ -39,6 +39,13 @@ export interface DocType {
   upsell?: { label: string; price?: number };
   /** ส่งรูปเข้า OCR หรือให้ผู้ใช้เลือกวันที่เอง */
   ocr: boolean;
+  /**
+   * คนหนึ่งมีได้ใบเดียว — บัตรประชาชน ใบขับขี่ พาสปอร์ต
+   * ส่งใบใหม่มา = ต่ออายุใบเดิม ไม่ใช่เพิ่มใบที่สอง
+   *
+   * ตรงข้ามกับเอกสารรถ ที่มีหลายใบได้เพราะมีหลายคัน
+   */
+  singleton?: boolean;
   /** ข้อความช่วยตอนขอรูป */
   hint?: string;
 }
@@ -69,7 +76,7 @@ export const DOC_TYPES: DocType[] = [
   },
   {
     key: 'driving_license', label: 'ใบขับขี่', emoji: '🚗', tier: 1, group: 'identity',
-    offsets: [-90, -30, -7, 1], termMonths: 60, renewWindowDays: 90, ocr: true,
+    offsets: [-90, -30, -7, 1], termMonths: 60, renewWindowDays: 90, ocr: true, singleton: true,
     hint: 'ถ่ายด้านหน้าใบขับขี่',
   },
 
@@ -78,20 +85,20 @@ export const DOC_TYPES: DocType[] = [
     // เอกสารที่คนไทยมีกันทุกคน — ควรอยู่ในระบบตั้งแต่แรก
     // ต่อได้ล่วงหน้า 60 วัน · เลยกำหนดเกิน 60 วันมีค่าปรับ
     key: 'national_id', label: 'บัตรประชาชน', emoji: '🪪', tier: 2, group: 'identity',
-    offsets: [-60, -30, -7, 1], termMonths: 96, renewWindowDays: 60, ocr: true,
+    offsets: [-60, -30, -7, 1], termMonths: 96, renewWindowDays: 60, ocr: true, singleton: true,
     hint: 'ถ่ายด้านหน้าบัตร ให้เห็นวันหมดอายุชัด ๆ',
   },
   {
     key: 'passport', label: 'พาสปอร์ต', emoji: '📕', tier: 2, group: 'identity',
     // เตือนตั้งแต่เหลือ 9 เดือน — ช่วงเวลาเดียวที่ไม่มีใครในโลกเตือนเขา
-    offsets: [-270, -180, -90, 1], termMonths: 120, ocr: true,
+    offsets: [-270, -180, -90, 1], termMonths: 120, ocr: true, singleton: true,
     hint: 'ถ่ายหน้าที่มีรูปและวันหมดอายุ',
   },
   { key: 'visa', label: 'วีซ่า', emoji: '🛂', tier: 2, group: 'identity', offsets: [-60, -30, -7, 1], ocr: true },
   { key: 'work_permit', label: 'ใบอนุญาตทำงาน', emoji: '💼', tier: 2, group: 'identity', offsets: [-60, -30, -7, 1], termMonths: 12, ocr: true },
   { key: 'health_insurance', label: 'ประกันสุขภาพ', emoji: '🏥', tier: 2, group: 'insurance', offsets: [-45, -14, 1], termMonths: 12, ocr: true },
   { key: 'life_insurance', label: 'ประกันชีวิต', emoji: '📘', tier: 2, group: 'insurance', offsets: [-45, -14, 1], termMonths: 12, ocr: true },
-  { key: 'social_security', label: 'ประกันสังคม ม.39/40', emoji: '🧾', tier: 2, group: 'insurance', offsets: [-30, -7, 1], termMonths: 12, ocr: false },
+  { key: 'social_security', label: 'ประกันสังคม ม.39/40', emoji: '🧾', tier: 2, group: 'insurance', offsets: [-30, -7, 1], termMonths: 12, ocr: false, singleton: true },
   { key: 'professional_license', label: 'ใบอนุญาตวิชาชีพ', emoji: '📜', tier: 2, group: 'identity', offsets: [-90, -30, -7, 1], ocr: true },
   { key: 'lease', label: 'สัญญาเช่า', emoji: '🏠', tier: 2, group: 'other', offsets: [-60, -30, -7, 1], termMonths: 12, ocr: false },
 

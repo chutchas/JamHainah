@@ -1,5 +1,6 @@
 import { db } from './client';
 import { computeReminders } from '@/lib/domain/reminders';
+import { docType as docTypeOf } from '@/lib/domain/docTypes';
 import type { ISODate } from '@/lib/domain/thaiDate';
 
 export interface DocumentRow {
@@ -107,28 +108,65 @@ export async function createDocument(args: {
   return data as DocumentRow;
 }
 
+/** ผลการเทียบกับเอกสารที่มีอยู่แล้ว */
+export type MatchKind = 'none' | 'duplicate' | 'renewal' | 'ambiguous';
+
+const normLabel = (v?: string | null) =>
+  (v ?? '').replace(/[\s\-.]/g, '').toLowerCase();
+
 /**
- * หาเอกสารใบเดิมที่ผู้ใช้เคยบันทึกไว้แล้ว
+ * เอกสารที่ส่งเข้ามาใหม่ ตรงกับใบไหนที่มีอยู่แล้วหรือเปล่า
  *
- * คนส่งรูปเดิมซ้ำเป็นเรื่องปกติมาก (ส่งแล้วไม่แน่ใจว่าติดไหม เลยส่งอีก)
- * ถ้าไม่กัน รายการจะรก แล้วเขาจะได้การเตือนซ้ำ 2-3 ครั้งในวันเดียวกัน
- * ซึ่งเป็นเหตุผลอันดับหนึ่งที่คนบล็อก OA
+ *   duplicate  ใบเดิมเป๊ะ ๆ — ส่งซ้ำ ไม่ต้องบันทึกอีก
+ *   renewal    ใบเดิมแต่วันหมดอายุใหม่ — เขาต่ออายุมาแล้ว ให้เลื่อนวันของใบเดิม
+ *   ambiguous  มีใบของประเภทนี้อยู่ แต่ไม่มีเลขให้เทียบ — เดาไม่ได้ ต้องถาม
+ *   none       ของใหม่จริง
+ *
+ * ทำไมต้องแยก renewal ออกมา: ถ้าปล่อยให้สร้างใบที่สอง ผู้ใช้จะถูกเตือน
+ * ด้วยวันเก่าที่ผ่านไปแล้วตลอดไป และรายการจะรกขึ้นทุกปี
  */
-export async function findDuplicate(
-  lineUserId: string,
-  docTypeKey: string,
-  expiryDate: ISODate
-): Promise<DocumentRow | null> {
+export async function resolveExisting(args: {
+  lineUserId: string;
+  docTypeKey: string;
+  label?: string | null;
+  expiryDate: ISODate;
+}): Promise<{ kind: MatchKind; doc?: DocumentRow }> {
   const { data } = await db()
     .from('documents')
     .select('*')
-    .eq('line_user_id', lineUserId)
-    .eq('doc_type', docTypeKey)
-    .eq('expiry_date', expiryDate)
+    .eq('line_user_id', args.lineUserId)
+    .eq('doc_type', args.docTypeKey)
     .is('archived_at', null)
-    .limit(1)
-    .maybeSingle();
-  return (data as DocumentRow) ?? null;
+    .order('created_at', { ascending: false });
+
+  const rows = (data as DocumentRow[]) ?? [];
+  if (rows.length === 0) return { kind: 'none' };
+
+  const type = docTypeOf(args.docTypeKey);
+  const verdict = (doc: DocumentRow): { kind: MatchKind; doc: DocumentRow } => ({
+    kind: doc.expiry_date === args.expiryDate ? 'duplicate' : 'renewal',
+    doc,
+  });
+
+  // คนหนึ่งมีใบเดียว — ไม่ต้องดูเลขอะไรทั้งนั้น
+  if (type.singleton) return verdict(rows[0]);
+
+  // มีเลขให้เทียบ (ทะเบียนรถ / เลขกรมธรรม์) — แม่นที่สุด
+  const incoming = normLabel(args.label);
+  if (incoming) {
+    const sameLabel = rows.find((r) => normLabel(r.label) === incoming);
+    if (sameLabel) return verdict(sameLabel);
+    return { kind: 'none' }; // คนละทะเบียน = คนละคัน
+  }
+
+  // ไม่มีเลขให้เทียบ
+  const sameDate = rows.find((r) => r.expiry_date === args.expiryDate);
+  if (sameDate) return { kind: 'duplicate', doc: sameDate };
+
+  // มีใบของประเภทนี้อยู่ใบเดียว วันไม่ตรง — ต่ออายุ หรือคนละคัน? เดาไม่ได้
+  if (rows.length === 1) return { kind: 'ambiguous', doc: rows[0] };
+
+  return { kind: 'none' };
 }
 
 export async function getDocument(id: string): Promise<DocumentRow | null> {

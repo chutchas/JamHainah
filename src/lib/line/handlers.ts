@@ -110,12 +110,11 @@ async function onImage(ev: Ev, userId: string, messageId: string) {
     return reply(ev.replyToken, M.askDate({ typeKey, reason: 'ocr_miss' }));
   }
 
-  const dup = await repo.findDuplicate(userId, typeKey, extraction.expiryDate);
-  if (dup) {
-    await repo.setPending(userId, null);
-    await repo.track('duplicate_skipped', userId, { typeKey });
-    return reply(ev.replyToken, M.alreadyHave(dup.doc_type, dup.label, dup.expiry_date));
-  }
+  const handled = await handleExisting({
+    replyToken: ev.replyToken, userId, typeKey,
+    label: extraction.label, expiryDate: extraction.expiryDate, today,
+  });
+  if (handled) return;
 
   const doc = await repo.createDocument({
     lineUserId: userId,
@@ -206,12 +205,12 @@ async function onPostback(ev: Ev, userId: string) {
       // เราอ่านวันที่จากรูปได้แล้ว ขาดแค่ประเภท — พอเขาตอบก็จบเลย
       // ไม่ต้องให้ถ่ายรูปใหม่หรือเลือกวันที่ซ้ำ
       if (pendingType.expiryDate && isISODate(pendingType.expiryDate)) {
-        const dupByType = await repo.findDuplicate(userId, typeKey, pendingType.expiryDate);
-        if (dupByType) {
-          await repo.setPending(userId, null);
-          await repo.track('duplicate_skipped', userId, { typeKey, via: 'type_pick' });
-          return reply(ev.replyToken, M.alreadyHave(dupByType.doc_type, dupByType.label, dupByType.expiry_date));
-        }
+        const handledByType = await handleExisting({
+          replyToken: ev.replyToken, userId, typeKey,
+          label: pendingType.label, expiryDate: pendingType.expiryDate, today,
+        });
+        if (handledByType) return;
+
         const doc = await repo.createDocument({
           lineUserId: userId,
           docTypeKey: typeKey,
@@ -241,6 +240,54 @@ async function onPostback(ev: Ev, userId: string) {
           },
         },
       ]);
+    }
+
+    /* ---- ตอบว่าเป็นการต่ออายุใบเดิม ---- */
+    case 'renew_existing': {
+      const pend = await repo.getPending(userId);
+      const target = docId ?? pend.documentId;
+      if (!target || !pend.expiryDate || !isISODate(pend.expiryDate)) return reply(ev.replyToken, M.fallback());
+      const doc = await repo.getDocument(target);
+      if (!doc) return reply(ev.replyToken, M.fallback());
+
+      const from = doc.expiry_date;
+      await repo.updateDocument(doc.id, {
+        expiry_date: pend.expiryDate,
+        label: doc.label ?? pend.label ?? null,
+        renewed_count: doc.renewed_count + 1,
+        confirmed_by_user: true,
+      });
+      const fresh = await repo.getDocument(doc.id);
+      const rows = fresh ? await repo.regenerateReminders(fresh, today) : [];
+      await repo.setPending(userId, null);
+      await repo.track('renewed_by_new_copy', userId, { typeKey: doc.doc_type, from, to: pend.expiryDate, via: 'asked' });
+      return reply(
+        ev.replyToken,
+        M.renewedFromNewCopy({ typeKey: doc.doc_type, label: doc.label, from, to: pend.expiryDate, reminderDates: rows })
+      );
+    }
+
+    /* ---- ตอบว่าเป็นคนละใบ (รถอีกคัน) ---- */
+    case 'as_new': {
+      const pend = await repo.getPending(userId);
+      if (!pend.docTypeKey || !pend.expiryDate || !isISODate(pend.expiryDate)) {
+        return reply(ev.replyToken, M.fallback());
+      }
+      const created = await repo.createDocument({
+        lineUserId: userId,
+        docTypeKey: pend.docTypeKey,
+        label: pend.label ?? null,
+        expiryDate: pend.expiryDate,
+        confirmed: false,
+        source: 'ocr',
+        meta: { kept_as_separate: true },
+      });
+      await repo.setPending(userId, null);
+      await repo.track('kept_as_separate', userId, { typeKey: pend.docTypeKey });
+      return reply(
+        ev.replyToken,
+        M.confirmExtracted({ documentId: created.id, typeKey: created.doc_type, label: created.label, expiry: created.expiry_date, today })
+      );
     }
 
     case 'manual':
@@ -307,6 +354,76 @@ async function onPostback(ev: Ev, userId: string) {
     default:
       return reply(ev.replyToken, M.fallback());
   }
+}
+
+/**
+ * เอกสารใหม่ตรงกับใบไหนที่มีอยู่ — จัดการให้ครบทั้ง 4 กรณีในที่เดียว
+ * คืน true ถ้าจัดการจบแล้ว (ตอบผู้ใช้ไปแล้ว) / false ถ้าให้สร้างใบใหม่ต่อได้
+ */
+async function handleExisting(args: {
+  replyToken: string;
+  userId: string;
+  typeKey: string;
+  label?: string | null;
+  expiryDate: string;
+  today: string;
+}): Promise<boolean> {
+  const { kind, doc } = await repo.resolveExisting({
+    lineUserId: args.userId,
+    docTypeKey: args.typeKey,
+    label: args.label,
+    expiryDate: args.expiryDate,
+  });
+
+  if (kind === 'none' || !doc) return false;
+
+  if (kind === 'duplicate') {
+    await repo.setPending(args.userId, null);
+    await repo.track('duplicate_skipped', args.userId, { typeKey: args.typeKey });
+    await reply(args.replyToken, M.alreadyHave(doc.doc_type, doc.label, doc.expiry_date));
+    return true;
+  }
+
+  if (kind === 'renewal') {
+    const from = doc.expiry_date;
+    await repo.updateDocument(doc.id, {
+      expiry_date: args.expiryDate,
+      label: doc.label ?? args.label ?? null,
+      renewed_count: doc.renewed_count + 1,
+      confirmed_by_user: true,
+    });
+    const fresh = await repo.getDocument(doc.id);
+    const rows = fresh ? await repo.regenerateReminders(fresh, args.today) : [];
+    await repo.setPending(args.userId, null);
+    await repo.track('renewed_by_new_copy', args.userId, { typeKey: args.typeKey, from, to: args.expiryDate });
+    await reply(
+      args.replyToken,
+      M.renewedFromNewCopy({ typeKey: doc.doc_type, label: doc.label ?? args.label, from, to: args.expiryDate, reminderDates: rows })
+    );
+    return true;
+  }
+
+  // ambiguous — ห้ามเดา ถามผู้ใช้ แล้วเก็บของใหม่ไว้ใน pending
+  await repo.setPending(args.userId, {
+    awaiting: 'type',
+    docTypeKey: args.typeKey,
+    documentId: doc.id,
+    expiryDate: args.expiryDate,
+    label: args.label ?? undefined,
+    at: new Date().toISOString(),
+  });
+  await repo.track('renewal_ambiguous', args.userId, { typeKey: args.typeKey });
+  await reply(
+    args.replyToken,
+    M.askRenewalOrNew({
+      typeKey: args.typeKey,
+      existingId: doc.id,
+      existingLabel: doc.label,
+      existingExpiry: doc.expiry_date,
+      newExpiry: args.expiryDate,
+    })
+  );
+  return true;
 }
 
 function replyList(replyToken: string) {

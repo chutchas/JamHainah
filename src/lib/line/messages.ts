@@ -144,7 +144,7 @@ export function confirmExtracted(args: {
   ];
 }
 
-/** เจอใบเดิมที่บันทึกไว้แล้ว — บอกตรง ๆ ดีกว่าเพิ่มซ้ำเงียบ ๆ */
+/** ส่งใบเดิมซ้ำ — บอกตรง ๆ ดีกว่าเพิ่มซ้ำเงียบ ๆ */
 export function alreadyHave(typeKey: string, label: string | null | undefined, expiry: ISODate): LineMessage[] {
   return [
     text(
@@ -152,6 +152,58 @@ export function alreadyHave(typeKey: string, label: string | null | undefined, e
       chips([
         { label: '📋 ดูรายการทั้งหมด', data: pb('list') },
         { label: '📸 เพิ่มใบอื่น', camera: true },
+      ])
+    ),
+  ];
+}
+
+/**
+ * ใบเดิมแต่วันหมดอายุใหม่ = เขาต่ออายุมาแล้ว
+ *
+ * นี่คือสัญญาณที่มีค่าที่สุดในระบบ — เอกสารต่ออายุตัวเองโดยที่ผู้ใช้
+ * ไม่ต้องทำอะไรเลยนอกจากถ่ายรูปใบใหม่
+ */
+export function renewedFromNewCopy(args: {
+  typeKey: string;
+  label?: string | null;
+  from: ISODate;
+  to: ISODate;
+  reminderDates: Array<{ send_on: ISODate; offset_days: number }>;
+}): LineMessage[] {
+  const next = args.reminderDates.find((r) => r.offset_days < 0);
+  return [
+    text(
+      `ต่ออายุแล้วนี่เอง ✅\n${displayName(args.typeKey, args.label)}\n\n` +
+        `${formatThai(args.from)} → ${formatThai(args.to)}\n\n` +
+        (next ? `ครั้งต่อไปผมจะเตือน ${formatThai(next.send_on)} ครับ` : 'ผมอัปเดตให้แล้วครับ'),
+      chips([{ label: '📋 ดูรายการทั้งหมด', data: pb('list') }])
+    ),
+  ];
+}
+
+/**
+ * มีใบของประเภทนี้อยู่แล้ว แต่ไม่มีเลขให้เทียบ วันก็ไม่ตรง
+ * เดาไม่ได้ว่าต่ออายุหรือคนละคัน — ต้องถาม
+ *
+ * เดาผิดฝั่งไหนก็เสียหาย: ทับใบเดิม = ข้อมูลรถอีกคันหาย
+ * สร้างใบใหม่ = โดนเตือนด้วยวันที่ผ่านไปแล้วตลอดไป
+ */
+export function askRenewalOrNew(args: {
+  typeKey: string;
+  existingId: string;
+  existingLabel?: string | null;
+  existingExpiry: ISODate;
+  newExpiry: ISODate;
+}): LineMessage[] {
+  return [
+    text(
+      `ผมมี ${displayName(args.typeKey, args.existingLabel)} อยู่แล้ว 1 ใบ\n` +
+        `หมดอายุ ${formatThai(args.existingExpiry)}\n\n` +
+        `ใบที่เพิ่งส่งมาหมดอายุ ${formatThai(args.newExpiry)}\n` +
+        `ใบนี้คืออันไหนครับ`,
+      chips([
+        { label: '🔄 ต่ออายุใบเดิม', data: pb('renew_existing', { d: args.existingId }) },
+        { label: '➕ คนละใบ/คนละคัน', data: pb('as_new') },
       ])
     ),
   ];
