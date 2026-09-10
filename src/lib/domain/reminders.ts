@@ -51,6 +51,26 @@ export function computeReminders(args: {
     });
   }
 
+  /**
+   * เพิ่มเอกสารตอนที่ใกล้หมดอายุมากแล้ว — รอบเตือนก่อนกำหนดเลยไปหมด
+   *
+   * ถ้าปล่อยไว้ ผู้ใช้จะไม่ได้รับการเตือน "ก่อน" หมดอายุเลยสักครั้ง
+   * เงียบจนกว่าจะเลยกำหนดไปแล้ว ซึ่งขัดกับเหตุผลทั้งหมดที่บริการนี้มีอยู่
+   *
+   * เตือนวันนี้เลย — เขาเพิ่งใส่เข้ามา แปลว่าเขากำลังคิดเรื่องนี้อยู่พอดี
+   */
+  const daysLeft = daysBetween(today, expiryDate);
+  const hasUpcoming = rows.some((r) => r.offset_days < 0);
+  if (!hasUpcoming && daysLeft >= 0) {
+    rows.push({
+      document_id: documentId,
+      line_user_id: lineUserId,
+      send_on: today,
+      offset_days: -daysLeft,
+      kind: 'upcoming',
+    });
+  }
+
   // เอกสารที่หมดอายุไปแล้วตอนที่ใส่เข้ามา — ยังต้องถามว่าต่อหรือยัง
   // ไม่งั้นมันจะนอนนิ่งในฐานข้อมูลตลอดไปโดยไม่มีใครแตะ
   if (rows.length === 0) {

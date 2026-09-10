@@ -137,9 +137,36 @@ export function confirmExtracted(args: {
       ],
       [
         button('✅ ถูกต้อง', pb('confirm', { d: args.documentId }), 'primary'),
-        button('✏️ แก้ไขวันที่', pb('edit', { d: args.documentId })),
+        // datetimepicker ตรงนี้เลย — เดิมเป็น postback แล้วค่อยส่งปุ่มปฏิทินตามมา
+        // ทำให้ผู้ใช้ต้องกดสองรอบเพื่อทำเรื่องเดียว
+        {
+          type: 'button', style: 'link', height: 'sm',
+          action: {
+            type: 'datetimepicker',
+            label: '✏️ แก้ไขวันที่',
+            data: pb('setdate', { d: args.documentId }),
+            mode: 'date',
+            initial: args.expiry,
+          },
+        },
       ],
       `${t.label} หมดอายุ ${formatThai(args.expiry)}`
+    ),
+  ];
+}
+
+/**
+ * กดปุ่มในการ์ดเดิมซ้ำ — การ์ด LINE ที่ส่งไปแล้วแก้ไม่ได้ ปุ่มจึงยังกดได้เสมอ
+ * กันที่ฝั่งเซิร์ฟเวอร์แทน ไม่งั้นคิวเตือนจะถูกสร้างใหม่ทุกครั้งที่กด
+ */
+export function alreadyConfirmed(typeKey: string, label: string | null | undefined, expiry: ISODate): LineMessage[] {
+  return [
+    text(
+      `${displayName(typeKey, label)} ยืนยันไปแล้วครับ ✅\nหมดอายุ ${formatThai(expiry)}`,
+      chips([
+        { label: '📋 ดูรายการทั้งหมด', data: pb('list') },
+        { label: '📸 เพิ่มเอกสารอื่น', camera: true },
+      ])
     ),
   ];
 }
@@ -297,11 +324,15 @@ export function savedAndSuggestMore(args: {
   typeKey: string;
   reminderDates: Array<{ send_on: ISODate; offset_days: number }>;
   docCount: number;
+  today: ISODate;
+  /** ประเภทที่ผู้ใช้มีอยู่แล้ว — ของที่มีได้ใบเดียวจะไม่ถูกชวนซ้ำ */
+  ownedTypeKeys?: string[];
 }): LineMessage[] {
-  const upcoming = args.reminderDates.filter((r) => r.offset_days < 0);
+  const upcoming = args.reminderDates.filter((r) => r.offset_days <= 0);
   const lines = upcoming.map((r) => {
     const when =
-      r.offset_days <= -60 ? 'วันแรกที่ต่อได้'
+      r.send_on === args.today ? 'วันนี้เลย'
+      : r.offset_days <= -60 ? 'วันแรกที่ต่อได้'
       : `เหลือ ${Math.abs(r.offset_days)} วัน`;
     return `📅 ${formatThai(r.send_on)} — ${when}`;
   });
@@ -327,7 +358,13 @@ export function savedAndSuggestMore(args: {
   } else {
     // ชวนเพิ่มให้เข้ากับสิ่งที่เพิ่งบันทึก — บันทึกบัตรประชาชนแล้วพูดเรื่องรถ คนจะงง
     const group = SUGGEST_BY_GROUP[docType(args.typeKey).group];
-    const suggest = group.keys.filter((k) => k !== args.typeKey).slice(0, 3).map(docType);
+    const owned = new Set(args.ownedTypeKeys ?? []);
+    const suggest = group.keys
+      .filter((k) => k !== args.typeKey)
+      // อย่าชวนเพิ่มบัตรประชาชนถ้าเขามีแล้ว — คนหนึ่งมีได้ใบเดียว
+      .filter((k) => !(owned.has(k) && docType(k).singleton))
+      .slice(0, 3)
+      .map(docType);
     out.push(
       text(
         group.prompt,

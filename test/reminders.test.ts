@@ -49,3 +49,28 @@ test('ใบขับขี่อายุ 5 ปี', () => {
 test('ประเภทที่ไม่รู้อายุปกติ คืน null เพื่อไปถามผู้ใช้', () => {
   assert.equal(rolloverExpiry({ docTypeKey: 'visa', currentExpiry: '2026-01-01', today: '2026-09-10' }), null);
 });
+
+test('เพิ่มเอกสารตอนใกล้หมดอายุ ต้องได้เตือนวันนี้เลย ไม่ใช่เงียบจนเลยกำหนด', () => {
+  // บัตรประชาชนเตือน D-60/-30/-7 แต่เหลืออีกวันเดียว รอบพวกนั้นเลยไปหมดแล้ว
+  const rows = computeReminders({
+    ...base, docTypeKey: 'national_id', expiryDate: '2026-09-11', today: '2026-09-10',
+  });
+  const todayRow = rows.find((r) => r.send_on === '2026-09-10');
+  assert.ok(todayRow, 'ต้องมีการเตือนวันนี้');
+  assert.equal(todayRow!.kind, 'upcoming');
+  assert.equal(todayRow!.offset_days, -1);
+  // และยังต้องมีรอบถามว่าต่อหรือยังหลังครบกำหนด
+  assert.ok(rows.some((r) => r.kind === 'due'));
+});
+
+test('หมดอายุวันนี้พอดี ก็ยังต้องเตือนวันนี้', () => {
+  const rows = computeReminders({ ...base, expiryDate: '2026-09-10', today: '2026-09-10' });
+  const todayRow = rows.find((r) => r.send_on === '2026-09-10' && r.kind === 'upcoming');
+  assert.ok(todayRow);
+  assert.equal(todayRow!.offset_days, 0);
+});
+
+test('เอกสารที่ยังอีกนาน ไม่ต้องเพิ่มการเตือนวันนี้', () => {
+  const rows = computeReminders({ ...base, expiryDate: '2027-06-01', today: '2026-09-10' });
+  assert.equal(rows.some((r) => r.send_on === '2026-09-10'), false);
+});

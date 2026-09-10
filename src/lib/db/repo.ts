@@ -192,6 +192,16 @@ export async function listDocuments(lineUserId: string): Promise<DocumentRow[]> 
   return (data as DocumentRow[]) ?? [];
 }
 
+/** ประเภทเอกสารที่ผู้ใช้มีอยู่แล้ว — ใช้กันการชวนเพิ่มของที่มีแล้ว */
+export async function listDocTypeKeys(lineUserId: string): Promise<string[]> {
+  const { data } = await db()
+    .from('documents')
+    .select('doc_type')
+    .eq('line_user_id', lineUserId)
+    .is('archived_at', null);
+  return [...new Set(((data as Array<{ doc_type: string }>) ?? []).map((r) => r.doc_type))];
+}
+
 export async function countDocuments(lineUserId: string): Promise<number> {
   const { count } = await db()
     .from('documents')

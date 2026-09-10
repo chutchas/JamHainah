@@ -152,12 +152,20 @@ async function onPostback(ev: Ev, userId: string) {
       const doc = await repo.getDocument(docId);
       if (!doc) return reply(ev.replyToken, M.fallback());
 
+      // การ์ดที่ส่งไปแล้วแก้ไม่ได้ ปุ่มจึงกดซ้ำได้เสมอ — กันที่นี่แทน
+      if (doc.confirmed_by_user) {
+        return reply(ev.replyToken, M.alreadyConfirmed(doc.doc_type, doc.label, doc.expiry_date));
+      }
+
       await repo.updateDocument(doc.id, { confirmed_by_user: true });
       const rows = await repo.regenerateReminders(doc, today);
       const count = await repo.countDocuments(userId);
+      const owned = await repo.listDocTypeKeys(userId);
       await repo.track('doc_confirmed', userId, { typeKey: doc.doc_type, docCount: count });
 
-      return reply(ev.replyToken, M.savedAndSuggestMore({ typeKey: doc.doc_type, reminderDates: rows, docCount: count }));
+      return reply(ev.replyToken, M.savedAndSuggestMore({
+        typeKey: doc.doc_type, reminderDates: rows, docCount: count, today, ownedTypeKeys: owned,
+      }));
     }
 
     /* ---- ผู้ใช้กด "แก้ไขวันที่" = ตัวอย่างที่โมเดลอ่านพลาด (ของมีค่า) ---- */
@@ -190,10 +198,13 @@ async function onPostback(ev: Ev, userId: string) {
 
       const rows = await repo.regenerateReminders(doc, today);
       const count = await repo.countDocuments(userId);
+      const ownedNow = await repo.listDocTypeKeys(userId);
       await repo.setPending(userId, null);
       await repo.track('doc_confirmed', userId, { typeKey: doc.doc_type, docCount: count, source: 'manual' });
 
-      return reply(ev.replyToken, M.savedAndSuggestMore({ typeKey: doc.doc_type, reminderDates: rows, docCount: count }));
+      return reply(ev.replyToken, M.savedAndSuggestMore({
+        typeKey: doc.doc_type, reminderDates: rows, docCount: count, today, ownedTypeKeys: ownedNow,
+      }));
     }
 
     /* ---- เลือกประเภทเอกสารจากชิป ---- */
