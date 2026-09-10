@@ -89,12 +89,16 @@ export async function createDocument(args: {
   const purge = new Date();
   purge.setDate(purge.getDate() + 30); // PDPA: ลบรูปต้นฉบับใน 30 วัน
 
+  // เอกสารที่คนหนึ่งมีได้ใบเดียว ไม่มีอะไรให้แยกแยะ label จึงไม่มีประโยชน์
+  // และมักกลายเป็นชื่อเอกสารซ้ำ เช่น "บัตรประชาชน · บัตรประจำตัวประชาชน"
+  const label = docTypeOf(args.docTypeKey).singleton ? null : (args.label ?? null);
+
   const { data, error } = await db()
     .from('documents')
     .insert({
       line_user_id: args.lineUserId,
       doc_type: args.docTypeKey,
-      label: args.label ?? null,
+      label,
       expiry_date: args.expiryDate,
       confirmed_by_user: args.confirmed,
       source: args.source,

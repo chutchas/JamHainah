@@ -164,7 +164,8 @@ async function onPostback(ev: Ev, userId: string) {
       await repo.track('doc_confirmed', userId, { typeKey: doc.doc_type, docCount: count });
 
       return reply(ev.replyToken, M.savedAndSuggestMore({
-        typeKey: doc.doc_type, reminderDates: rows, docCount: count, today, ownedTypeKeys: owned,
+        typeKey: doc.doc_type, reminderDates: rows, docCount: count, today,
+        expiry: doc.expiry_date, ownedTypeKeys: owned,
       }));
     }
 
@@ -203,7 +204,8 @@ async function onPostback(ev: Ev, userId: string) {
       await repo.track('doc_confirmed', userId, { typeKey: doc.doc_type, docCount: count, source: 'manual' });
 
       return reply(ev.replyToken, M.savedAndSuggestMore({
-        typeKey: doc.doc_type, reminderDates: rows, docCount: count, today, ownedTypeKeys: ownedNow,
+        typeKey: doc.doc_type, reminderDates: rows, docCount: count, today,
+        expiry: doc.expiry_date, ownedTypeKeys: ownedNow,
       }));
     }
 
@@ -320,6 +322,21 @@ async function onPostback(ev: Ev, userId: string) {
       );
     }
 
+    /* ---- การ์ดรวมหลายใบ: ถามว่าต่อใบไหนไปแล้วบ้าง ---- */
+    case 'renewed_pick': {
+      const docs = await repo.listDocuments(userId);
+      // เอาเฉพาะใบที่ใกล้ครบกำหนดจริง ไม่ใช่ทั้งรายการ
+      const near = docs
+        .filter((d) => d.confirmed_by_user)
+        .map((d) => ({
+          documentId: d.id, typeKey: d.doc_type, label: d.label,
+          expiry: d.expiry_date, offsetDays: 0,
+        }))
+        .slice(0, 4);
+      if (near.length === 0) return replyList(ev.replyToken);
+      return reply(ev.replyToken, M.pickRenewed(near, today));
+    }
+
     case 'manual':
       return reply(ev.replyToken, M.askType());
 
@@ -341,7 +358,9 @@ async function onPostback(ev: Ev, userId: string) {
       if (fresh) await repo.regenerateReminders(fresh, today);
       await repo.track('renewed_self', userId, { typeKey: doc.doc_type, newExpiry: next });
 
-      return reply(ev.replyToken, M.rolledOver(doc.doc_type, doc.label, next));
+      return reply(ev.replyToken, M.rolledOver({
+        documentId: doc.id, typeKey: doc.doc_type, label: doc.label, newExpiry: next,
+      }));
     }
 
     case 'archive': {
