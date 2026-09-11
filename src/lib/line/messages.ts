@@ -186,35 +186,96 @@ export function greeting(): LineMessage[] {
  *   ความแม่นยำเป็น 100% ทันที และทุกครั้งที่กด "แก้ไข"
  *   เราได้ตัวอย่างที่โมเดลอ่านพลาดพร้อมเฉลย
  * ============================================================ */
-export function confirmExtracted(args: {
+export interface ExtractedDoc {
   documentId: string;
   typeKey: string;
   label?: string | null;
   expiry: ISODate;
-  today: ISODate;
-}): LineMessage[] {
-  const t = docType(args.typeKey);
-  const rows: LineMessage[] = [];
-  if (args.label) rows.push(row('เลขที่/ทะเบียน', args.label));
-  rows.push(row('หมดอายุ', formatThai(args.expiry)));
-  rows.push(row('เหลืออีก', humanRemaining(args.today, args.expiry), true));
+}
 
-  const card = bubble(
-    [
-      { type: 'text', text: `${t.emoji} ${t.label}`, weight: 'bold', size: 'lg', wrap: true },
-      { type: 'separator', margin: 'md' },
-      { type: 'box', layout: 'vertical', spacing: 'sm', margin: 'md', contents: rows },
-    ],
-    undefined,
-    `${t.label} หมดอายุ ${formatThai(args.expiry)}`
-  );
+/** เนื้อการ์ดหนึ่งใบ — ใช้ทั้งแบบใบเดียวและแบบเรียงกันหลายใบ */
+function extractedBubble(d: ExtractedDoc, today: ISODate): LineMessage {
+  const t = docType(d.typeKey);
+  const rows: LineMessage[] = [];
+  if (d.label) rows.push(row('เลขที่/ทะเบียน', d.label));
+  rows.push(row('หมดอายุ', formatThai(d.expiry)));
+  rows.push(row('เหลืออีก', humanRemaining(today, d.expiry), true));
+
+  return {
+    type: 'bubble',
+    body: {
+      type: 'box', layout: 'vertical', spacing: 'md',
+      contents: [
+        { type: 'text', text: `${t.emoji} ${t.label}`, weight: 'bold', size: 'lg', wrap: true },
+        { type: 'separator', margin: 'md' },
+        { type: 'box', layout: 'vertical', spacing: 'sm', margin: 'md', contents: rows },
+      ],
+    },
+  };
+}
+
+export function confirmExtracted(args: ExtractedDoc & { today: ISODate }): LineMessage[] {
+  const t = docType(args.typeKey);
+  const card: LineMessage = {
+    type: 'flex',
+    altText: `${t.label} หมดอายุ ${formatThai(args.expiry)}`,
+    contents: extractedBubble(args, args.today),
+  };
   card.quickReply = chips([
     { label: 'ถูกต้อง', data: pb('confirm', { d: args.documentId }), icon: 'check' },
     // ปฏิทินเปิดตรงนี้เลย — เดิมเป็น postback แล้วค่อยส่งปุ่มปฏิทินตามมา
     // ทำให้ผู้ใช้ต้องกดสองรอบเพื่อทำเรื่องเดียว
     { label: 'แก้ไขวันที่', data: pb('setdate', { d: args.documentId }), date: true, initial: args.expiry, icon: 'calendar' },
   ]);
-  return [text('อ่านได้แบบนี้ครับ ถูกต้องไหม'), card];
+  return [text('อ่านได้แบบนี้ครับ ตั้งเตือนไว้ให้แล้ว\nถ้าวันไหนผิด กดแก้ได้เลยครับ'), card];
+}
+
+/**
+ * ส่งรูปมาทีเดียวหลายใบ
+ *
+ * LINE แสดง quickReply ของข้อความสุดท้ายเท่านั้น
+ * ถ้าตอบแยกใบละข้อความ ปุ่มของใบก่อน ๆ จะถูกทับหายไปหมด
+ * ผู้ใช้จะยืนยันได้แค่ใบสุดท้าย และไม่มีทางรู้ว่าใบอื่นหายไปไหน
+ *
+ * จึงต้องตอบครั้งเดียว การ์ดเรียงกันในแถวเดียว แล้วมีปุ่มชุดเดียวคุมทั้งหมด
+ */
+export function confirmExtractedMany(docs: ExtractedDoc[], today: ISODate): LineMessage[] {
+  if (docs.length === 0) return [];
+  if (docs.length === 1) return confirmExtracted({ ...docs[0], today });
+
+  const card: LineMessage = {
+    type: 'flex',
+    altText: `อ่านได้ ${docs.length} ใบ`,
+    contents: { type: 'carousel', contents: docs.slice(0, 10).map((d) => extractedBubble(d, today)) },
+  };
+  card.quickReply = chips([
+    { label: `ถูกต้องทั้ง ${docs.length} ใบ`, data: pb('confirm_all'), icon: 'check' },
+    // แก้ทีละใบทำในหน้าเว็บ เพราะแชทให้ปุ่มได้ชุดเดียวต่อข้อความ
+    { label: 'แก้ทีละใบ', liff: true, icon: 'edit' },
+  ]);
+  return [
+    text(`อ่านได้ ${docs.length} ใบครับ ตั้งเตือนไว้ให้แล้ว\nเลื่อนดูทางขวาได้ ถ้าใบไหนผิดกดแก้ทีละใบครับ`),
+    card,
+  ];
+}
+
+/** ยืนยันรวดเดียวหลายใบ */
+export function savedMany(
+  docs: Array<{ typeKey: string; label?: string | null; expiry: ISODate }>,
+  today: ISODate
+): LineMessage[] {
+  const lines = docs.map(
+    (d) => `${docType(d.typeKey).emoji} ${displayName(d.typeKey, d.label)} — ${formatThai(d.expiry)}`
+  );
+  return [
+    text(
+      `บันทึกแล้วครับ ✅\n${lines.join('\n')}\n\nลืมได้เลยครับ ผมจำให้แล้ว`,
+      chips([
+        { label: LIST_NAME, liff: true, icon: 'doc' },
+        { label: 'เพิ่มเอกสารอื่น', camera: true, icon: 'camera' },
+      ])
+    ),
+  ];
 }
 
 /**

@@ -40,6 +40,14 @@ function everyMessage(): M.LineMessage[] {
     ...M.askType(),
     ...M.askPhotoFor('vehicle_tax'),
     ...M.howToAdd(),
+    ...M.confirmExtractedMany([
+      { documentId: 'd1', typeKey: 'vehicle_tax', label: '1กก 1234', expiry: '2026-12-15' },
+      { documentId: 'd2', typeKey: 'national_id', label: null, expiry: '2030-07-22' },
+    ], '2026-11-15'),
+    ...M.savedMany([
+      { typeKey: 'vehicle_tax', label: '1กก 1234', expiry: '2026-12-15' },
+      { typeKey: 'national_id', label: null, expiry: '2030-07-22' },
+    ], '2026-11-15'),
     ...M.correctedDate({ documentId: 'd1', typeKey: 'vehicle_tax', label: '1กก 1234', from: '2026-12-10', to: '2026-12-15', reminderDates: [], today: '2026-11-15' }),
     ...M.renewedFromNewCopy({ documentId: 'd1', typeKey: 'vehicle_tax', label: '1กก 1234', from: '2025-12-15', to: '2026-12-15', reminderDates: [], today: '2026-11-15' }),
     ...M.savedAndSuggestMore({ typeKey: 'vehicle_tax', reminderDates: [{ send_on: '2026-12-01', offset_days: -30 }], docCount: 1, today: '2026-11-15', expiry: '2026-12-15', ownedTypeKeys: [] }),
@@ -184,4 +192,26 @@ test('มีการ์ดเตือนด่วนต่อท้าย ต�
     docCount: 1, today: '2026-11-15', expiry: '2026-12-31', ownedTypeKeys: ['national_id'],
   });
   assert.ok(normal.length > 1);
+});
+
+test('ส่งรูปหลายใบ ต้องตอบครั้งเดียว ปุ่มชุดเดียวคุมทั้งหมด', () => {
+  // LINE แสดง quickReply ของข้อความสุดท้ายเท่านั้น
+  // ตอบแยกใบละข้อความเมื่อไหร่ ปุ่มของใบก่อน ๆ หายหมด ยืนยันได้แค่ใบสุดท้าย
+  const msgs = M.confirmExtractedMany([
+    { documentId: 'd1', typeKey: 'vehicle_tax', label: '1กก 1234', expiry: '2026-12-15' },
+    { documentId: 'd2', typeKey: 'national_id', label: null, expiry: '2030-07-22' },
+  ], '2026-11-15') as any[];
+
+  const card = msgs[msgs.length - 1];
+  assert.equal(card.contents.type, 'carousel', 'การ์ดต้องเรียงกันในข้อความเดียว');
+  assert.equal(card.contents.contents.length, 2);
+
+  const labels = quickItems(card).map((i: any) => i.action.label);
+  assert.ok(labels.some((l: string) => l.includes('ทั้ง 2 ใบ')), 'ต้องมีปุ่มยืนยันรวดเดียว');
+
+  // ใบเดียวยังต้องเป็นการ์ดเดี่ยวเหมือนเดิม ไม่ใช่ carousel ที่มีใบเดียว
+  const one = M.confirmExtractedMany([
+    { documentId: 'd1', typeKey: 'vehicle_tax', label: '1กก 1234', expiry: '2026-12-15' },
+  ], '2026-11-15') as any[];
+  assert.equal(one[one.length - 1].contents.type, 'bubble');
 });

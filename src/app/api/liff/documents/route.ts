@@ -115,6 +115,35 @@ export async function GET(req: NextRequest) {
   });
 }
 
+/**
+ * แก้วันหมดอายุจากหน้าเว็บ
+ *
+ * แชทให้ปุ่มได้ชุดเดียวต่อข้อความ ส่งรูปมาสามใบจึงแก้ในแชทได้ใบเดียว
+ * หน้านี้เป็นที่เดียวที่แก้ใบไหนก็ได้ ไม่ว่าผ่านมากี่วันแล้ว
+ */
+export async function PATCH(req: NextRequest) {
+  const userId = await authenticate(req);
+  if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  const { id, expiry } = (await req.json()) as { id?: string; expiry?: string };
+  if (!id || !expiry || !/^\d{4}-\d{2}-\d{2}$/.test(expiry)) {
+    return NextResponse.json({ error: 'bad request' }, { status: 400 });
+  }
+
+  const doc = await repo.getDocument(id);
+  if (!doc || doc.line_user_id !== userId) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 });
+  }
+
+  await repo.updateDocument(id, { expiry_date: expiry, confirmed_by_user: true, source: 'manual' });
+  const fresh = await repo.getDocument(id);
+  // วันเปลี่ยน คิวเตือนเดิมใช้ไม่ได้แล้ว ต้องคำนวณใหม่ทั้งชุด
+  if (fresh) await repo.regenerateReminders(fresh, todayInBangkok());
+  await repo.track('date_corrected', userId, { documentId: id, from: doc.expiry_date, to: expiry, via: 'liff' });
+
+  return NextResponse.json({ ok: true });
+}
+
 /** ลบเอกสารรายใบ หรือลบข้อมูลทั้งหมด (PDPA) — ต้องทำงานได้จริงตั้งแต่ v1 */
 export async function DELETE(req: NextRequest) {
   const userId = await authenticate(req);

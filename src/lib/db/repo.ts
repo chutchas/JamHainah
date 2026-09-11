@@ -229,6 +229,23 @@ export async function listDocuments(lineUserId: string): Promise<DocumentRow[]> 
   return (data as DocumentRow[]) ?? [];
 }
 
+/**
+ * ใบที่ยังไม่ได้กดยืนยัน — ใช้ตอนกด "ถูกต้องทั้งหมด"
+ *
+ * ไม่ส่ง id ไปกับปุ่ม เพราะ postback data ยาวได้ 300 ตัวอักษร
+ * uuid สิบใบก็เกินแล้ว และถ้าเกินมันจะเงียบไปเฉย ๆ ไม่มี error ให้เห็น
+ */
+export async function listUnconfirmed(lineUserId: string): Promise<DocumentRow[]> {
+  const { data } = await db()
+    .from('documents')
+    .select('*')
+    .eq('line_user_id', lineUserId)
+    .eq('confirmed_by_user', false)
+    .is('archived_at', null)
+    .order('created_at', { ascending: true });
+  return (data as DocumentRow[]) ?? [];
+}
+
 /** ประเภทเอกสารที่ผู้ใช้มีอยู่แล้ว — ใช้กันการชวนเพิ่มของที่มีแล้ว */
 export async function listDocTypeKeys(lineUserId: string): Promise<string[]> {
   const { data } = await db()

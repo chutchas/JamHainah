@@ -17,6 +17,55 @@ import * as repo from '@/lib/db/repo';
 
 type Ev = Record<string, any>;
 
+/**
+ * รูปหลายใบที่ส่งพร้อมกัน มาถึงเป็นหลาย event ในคำขอเดียว
+ *
+ * ถ้าตอบทีละใบ LINE จะแสดง quickReply ของข้อความสุดท้ายเท่านั้น
+ * ปุ่มของใบก่อน ๆ ถูกทับหายไปหมด ผู้ใช้ยืนยันได้แค่ใบสุดท้าย
+ * และไม่มีทางรู้ว่าใบอื่นหายไปไหน
+ *
+ * จึงต้องรู้ตั้งแต่ต้นว่าคำขอนี้มีรูปกี่ใบ แล้วตอบครั้งเดียว
+ */
+export interface EventFailure {
+  ev: Ev;
+  error: unknown;
+}
+
+export async function handleEvents(events: Ev[]): Promise<EventFailure[]> {
+  const images = events.filter(
+    (e) => e.type === 'message' && e.message?.type === 'image' && e.source?.userId
+  );
+
+  const failures: EventFailure[] = [];
+  /**
+   * event หนึ่งพังต้องไม่ลากอันอื่นไปด้วย
+   * คนที่ส่งรูปสามใบแล้วใบกลางอ่านไม่ออก ต้องยังได้คำตอบของอีกสองใบ
+   */
+  const guard = async (ev: Ev, run: () => Promise<void>) => {
+    try {
+      await run();
+    } catch (error) {
+      failures.push({ ev, error });
+    }
+  };
+
+  if (images.length < 2) {
+    await Promise.all(events.map((e) => guard(e, () => handleEvent(e))));
+    return failures;
+  }
+
+  // รูปทั้งชุดต้องเป็นของคนเดียวกันอยู่แล้ว แต่กันไว้ไม่ให้ตอบข้ามคน
+  const userId: string = images[0].source.userId;
+  const mine = images.filter((e) => e.source.userId === userId);
+  const rest = events.filter((e) => !mine.includes(e));
+
+  await Promise.all([
+    guard(mine[0], () => onImageBatch(mine, userId)),
+    ...rest.map((e) => guard(e, () => handleEvent(e))),
+  ]);
+  return failures;
+}
+
 export async function handleEvent(ev: Ev): Promise<void> {
   const userId: string | undefined = ev.source?.userId;
   if (!userId) return;
@@ -192,23 +241,105 @@ async function saveExtraction(args: {
   });
   if (handled) return;
 
-  const doc = await repo.createDocument({
-    lineUserId: userId,
-    docTypeKey: typeKey,
-    label: extraction.label,
-    expiryDate: extraction.expiryDate,
-    confirmed: false,
-    source,
-    meta: { ocr_confidence: extraction.confidence },
-  });
-
-  await repo.setPending(userId, null);
-  await repo.track('extract_hit', userId, { typeKey, confidence: extraction.confidence, source });
+  const doc = await createAndSchedule({ userId, typeKey, extraction, today, source });
 
   return reply(
     ev.replyToken,
     M.confirmExtracted({ documentId: doc.id, typeKey, label: doc.label, expiry: doc.expiry_date, today })
   );
+}
+
+/**
+ * สร้างเอกสารแล้วตั้งคิวเตือนทันที ไม่รอให้กด "ถูกต้อง"
+ *
+ * เดิมคิวเกิดตอนกดยืนยันเท่านั้น แปลว่าใบที่ผู้ใช้ไม่ได้กด (เพราะปุ่มถูกทับ
+ * เพราะเผลอ เพราะปิดแชทไปก่อน) จะไม่มีวันถูกเตือนเลย — เงียบสนิทจนถึงวันหมดอายุ
+ *
+ * สินค้าที่ขายว่า "จำให้" ต้องล้มไปทางเตือนเกิน ไม่ใช่ทางเงียบ
+ * เตือนด้วยวันที่อาจคลาดไปหนึ่งวัน ยังดีกว่าไม่เตือนเลย
+ * ปุ่ม "ถูกต้อง" จึงเหลือหน้าที่เดียวคือยืนยันว่าเราอ่านถูก (และเก็บเคสที่อ่านผิด)
+ */
+async function createAndSchedule(args: {
+  userId: string;
+  typeKey: string;
+  extraction: Extraction;
+  today: string;
+  source: 'ocr' | 'text';
+}): Promise<repo.DocumentRow> {
+  const doc = await repo.createDocument({
+    lineUserId: args.userId,
+    docTypeKey: args.typeKey,
+    label: args.extraction.label,
+    expiryDate: args.extraction.expiryDate as string,
+    confirmed: false,
+    source: args.source,
+    meta: { ocr_confidence: args.extraction.confidence },
+  });
+  await repo.regenerateReminders(doc, args.today);
+  await repo.setPending(args.userId, null);
+  await repo.track('extract_hit', args.userId, {
+    typeKey: args.typeKey, confidence: args.extraction.confidence, source: args.source,
+  });
+  return doc;
+}
+
+/**
+ * รูปหลายใบในคำขอเดียว — อ่านให้ครบก่อน แล้วค่อยตอบทีเดียว
+ *
+ * ใช้ reply token ของ event แรก อีกสองสามอันปล่อยหมดอายุไป
+ * ตอบซ้ำจะได้ "Invalid reply token" เปล่า ๆ และผู้ใช้จะเห็นข้อความซ้อนกันมั่ว
+ */
+async function onImageBatch(events: Ev[], userId: string) {
+  const today = todayInBangkok();
+  await repo.upsertUser(userId);
+  await showLoading(userId, 40);
+
+  const saved: M.ExtractedDoc[] = [];
+  const skipped: string[] = [];
+
+  for (const ev of events) {
+    try {
+      const buf = await getMessageContent(ev.message.id);
+      const extraction = await ocr().extract(buf, 'image/jpeg');
+      const typeKey = extraction.docTypeKey;
+
+      // ในโหมดหลายใบ ถามกลับทีละใบไม่ได้ — ปุ่มมีชุดเดียวต่อข้อความ
+      // ใบที่อ่านไม่ครบจึงบอกรวมไว้ท้ายข้อความ ให้เขาส่งใหม่ทีละใบ
+      if (!extraction.isDocument || !typeKey || !extraction.expiryDate ||
+          extraction.confidence < CONFIDENCE_FLOOR) {
+        skipped.push(typeKey ? docType(typeKey).label : 'รูปที่อ่านไม่ออก');
+        continue;
+      }
+
+      const match = await repo.resolveExisting({
+        lineUserId: userId, docTypeKey: typeKey,
+        label: extraction.label, expiryDate: extraction.expiryDate,
+      });
+      // ของซ้ำหรือของที่ต้องถาม ข้ามไปก่อน ให้เขาส่งใบนั้นเดี่ยว ๆ แล้วค่อยคุยกัน
+      if (match.kind !== 'none') {
+        skipped.push(docType(typeKey).label);
+        continue;
+      }
+
+      const doc = await createAndSchedule({ userId, typeKey, extraction, today, source: 'ocr' });
+      saved.push({ documentId: doc.id, typeKey, label: doc.label, expiry: doc.expiry_date });
+    } catch (err) {
+      await repo.track('ocr_error', userId, { message: String(err), batch: true });
+      skipped.push('รูปที่อ่านไม่ออก');
+    }
+  }
+
+  const token = events[0].replyToken;
+  if (saved.length === 0) return reply(token, M.notADocument());
+
+  const msgs = M.confirmExtractedMany(saved, today);
+  if (skipped.length > 0) {
+    msgs.unshift({
+      type: 'text',
+      text: `${skipped.length} ใบผมยังอ่านไม่ครบครับ (${skipped.join(' · ')})\nส่งใบนั้นมาใหม่ทีละใบได้ไหมครับ`,
+    });
+  }
+  return reply(token, msgs);
 }
 
 /* ---------------- ปุ่มทั้งหมด ---------------- */
@@ -487,6 +618,22 @@ async function onPostback(ev: Ev, userId: string) {
     case 'upsell_start': {
       await repo.track('upsell_started', userId, { typeKey });
       return reply(ev.replyToken, M.toHuman());
+    }
+
+    /* ---- ยืนยันรวดเดียวหลายใบ (มาจากการ์ดเรียงกัน) ---- */
+    case 'confirm_all': {
+      const docs = await repo.listUnconfirmed(userId);
+      if (docs.length === 0) return reply(ev.replyToken, M.fallback());
+      for (const d of docs) {
+        await repo.updateDocument(d.id, { confirmed_by_user: true });
+        const fresh = await repo.getDocument(d.id);
+        if (fresh) await repo.regenerateReminders(fresh, today);
+      }
+      await repo.track('confirmed_all', userId, { count: docs.length });
+      return reply(
+        ev.replyToken,
+        M.savedMany(docs.map((d) => ({ typeKey: d.doc_type, label: d.label, expiry: d.expiry_date })), today)
+      );
     }
 
     /* ---- rich menu : เพิ่มเอกสาร ---- */

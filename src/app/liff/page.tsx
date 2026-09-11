@@ -26,6 +26,8 @@ interface DocAction {
 
 interface Doc {
   id: string;
+  /** ISO — ใช้เป็นค่าตั้งต้นของช่องแก้วันที่ */
+  expiry: string;
   emoji: string;
   typeLabel: string;
   label: string | null;
@@ -69,6 +71,8 @@ export default function LiffPage() {
   const [askArea, setAskArea] = useState(false); // ยังไม่มีพิกัด — ชวนเปิด
   const [areaBusy, setAreaBusy] = useState(false);
   const [leadSent, setLeadSent] = useState<Set<string>>(new Set());
+  /** ใบที่กำลังเปิดช่องแก้วันที่อยู่ */
+  const [editing, setEditing] = useState<string | null>(null);
 
   const drag = useRef<{ id: string; startX: number; startY: number; dx: number; locked: boolean } | null>(null);
   /** ปัดจบแล้ว browser ยิง click ตามมาเสมอ — ถ้าไม่กันไว้ การปัดซ้ายจะไปเปิดถาดด้วย */
@@ -192,6 +196,31 @@ export default function LiffPage() {
       () => { setAreaBusy(false); setAskArea(false); },
       { enableHighAccuracy: false, timeout: 10000 }
     );
+  }
+
+  /**
+   * แก้วันหมดอายุ
+   *
+   * แชทให้ปุ่มได้ชุดเดียวต่อข้อความ ส่งรูปมาหลายใบจึงแก้ในแชทได้ใบเดียว
+   * ที่นี่แก้ใบไหนก็ได้ ไม่ว่าผ่านมากี่วันแล้ว
+   */
+  async function saveExpiry(id: string, expiry: string) {
+    if (!token || !expiry) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/liff/documents', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', 'x-liff-id-token': token },
+        body: JSON.stringify({ id, expiry }),
+      });
+      if (res.ok) {
+        setEditing(null);
+        // โหลดใหม่ทั้งรายการ เพราะรอบเตือนถูกคำนวณใหม่ที่ฝั่งเซิร์ฟเวอร์
+        await load(token);
+      }
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function requestLead(doc: Doc) {
@@ -389,6 +418,25 @@ export default function LiffPage() {
                       </>
                     )}
                   </div>
+
+                  {editing === d.id ? (
+                    <div className="edit">
+                      <input type="date" id={`exp-${d.id}`} defaultValue={d.expiry} />
+                      <button
+                        className="act primary"
+                        disabled={busy}
+                        onClick={() => {
+                          const el = document.getElementById(`exp-${d.id}`) as HTMLInputElement | null;
+                          if (el?.value) saveExpiry(d.id, el.value);
+                        }}
+                      >
+                        {busy ? 'กำลังบันทึก…' : 'บันทึกวันใหม่'}
+                      </button>
+                      <button className="act" onClick={() => setEditing(null)}>ยกเลิก</button>
+                    </div>
+                  ) : (
+                    <button className="act" onClick={() => setEditing(d.id)}>แก้วันหมดอายุ</button>
+                  )}
 
                   {d.renewOpensOn ? (
                     <p className="muted">ยังไม่ถึงรอบต่อครับ ต่อได้ตั้งแต่ {d.renewOpensOn}</p>

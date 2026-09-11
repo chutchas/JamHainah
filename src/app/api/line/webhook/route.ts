@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySignature } from '@/lib/line/signature';
-import { handleEvent } from '@/lib/line/handlers';
+import { handleEvents } from '@/lib/line/handlers';
 import { reply } from '@/lib/line/client';
 
 export const runtime = 'nodejs';
@@ -22,53 +22,51 @@ export async function POST(req: NextRequest) {
     return new NextResponse('bad json', { status: 400 });
   }
 
-  const events = Array.isArray(body.events) ? body.events : [];
+  const events = (Array.isArray(body.events) ? body.events : []) as Record<string, any>[];
+  const started = Date.now();
 
-  // จัดการทีละ event แต่ไม่ให้ event เดียวพังทั้งชุด
-  await Promise.all(
-    events.map(async (ev) => {
-      const e = ev as Record<string, any>;
-      const started = Date.now();
-      try {
-        await handleEvent(e);
-        console.log(`[webhook] ok type=${e?.type} ms=${Date.now() - started}`);
-      } catch (err) {
-        // log ให้อ่านออกใน Vercel — ไม่เอา stack ยาว ๆ ที่หาอะไรไม่เจอ
-        console.error(
-          `[webhook] FAILED type=${e?.type} ms=${Date.now() - started} error=${
-            err instanceof Error ? err.message : String(err)
-          }`
-        );
+  /**
+   * ส่งทั้งชุดเข้าไปพร้อมกัน ไม่ใช่ไล่ทีละอัน
+   * เพราะรูปหลายใบที่ส่งพร้อมกันต้องถูกตอบเป็นข้อความเดียว
+   * (quickReply ของ LINE แสดงเฉพาะข้อความสุดท้าย)
+   *
+   * handleEvents กัน error ของแต่ละ event ไว้เอง แล้วคืนเฉพาะอันที่พังกลับมา
+   * จะได้ไม่ยิงข้อความขอโทษให้ event ที่ทำงานสำเร็จไปแล้ว
+   */
+  const failures = await handleEvents(events);
+  console.log(`[webhook] n=${events.length} failed=${failures.length} ms=${Date.now() - started}`);
 
-        // ผู้ใช้ต้องไม่เจอความเงียบ
-        // เงียบแปลว่าเขาไม่รู้ว่าควรลองใหม่ หรือแอปพัง หรือรออยู่
-        //
-        // ยกเว้นกรณีที่ตัวการ reply เองคือสิ่งที่พัง — reply token ใช้ได้ครั้งเดียว
-        // ยิงซ้ำจะได้ "Invalid reply token" เปล่า ๆ แล้วทำให้ log อ่านยากขึ้น
-        const replyItselfFailed =
-          err instanceof Error && err.message.includes('/message/reply');
+  for (const { ev, error } of failures) {
+    // log ให้อ่านออกใน Vercel — ไม่เอา stack ยาว ๆ ที่หาอะไรไม่เจอ
+    console.error(
+      `[webhook] FAILED type=${ev?.type} error=${error instanceof Error ? error.message : String(error)}`
+    );
 
-        if (e?.replyToken && !replyItselfFailed) {
-          try {
-            await reply(e.replyToken, [
-              {
-                type: 'text',
-                text: 'ขออภัยครับ ระบบมีปัญหาชั่วคราว 🙏\nลองส่งใหม่อีกครั้งได้เลย',
-                quickReply: {
-                  items: [
-                    { type: 'action', action: { type: 'camera', label: '📸 ลองใหม่' } },
-                    { type: 'action', action: { type: 'postback', label: '💬 คุยกับคน', data: 'a=human', displayText: 'คุยกับคน' } },
-                  ],
-                },
-              },
-            ]);
-          } catch (replyErr) {
-            console.error('[webhook] fallback reply failed', replyErr);
-          }
-        }
-      }
-    })
-  );
+    // ผู้ใช้ต้องไม่เจอความเงียบ
+    // เงียบแปลว่าเขาไม่รู้ว่าควรลองใหม่ หรือแอปพัง หรือรออยู่
+    //
+    // ยกเว้นกรณีที่ตัวการ reply เองคือสิ่งที่พัง — reply token ใช้ได้ครั้งเดียว
+    // ยิงซ้ำจะได้ "Invalid reply token" เปล่า ๆ แล้วทำให้ log อ่านยากขึ้น
+    const replyItselfFailed = error instanceof Error && error.message.includes('/message/reply');
+    if (!ev?.replyToken || replyItselfFailed) continue;
+
+    try {
+      await reply(ev.replyToken, [
+        {
+          type: 'text',
+          text: 'ขออภัยครับ ระบบมีปัญหาชั่วคราว 🙏\nลองส่งใหม่อีกครั้งได้เลย',
+          quickReply: {
+            items: [
+              { type: 'action', action: { type: 'camera', label: 'ลองใหม่' } },
+              { type: 'action', action: { type: 'postback', label: 'คุยกับคน', data: 'a=human', displayText: 'คุยกับคน' } },
+            ],
+          },
+        },
+      ]);
+    } catch (replyErr) {
+      console.error('[webhook] fallback reply failed', replyErr);
+    }
+  }
 
   // LINE ต้องได้ 200 เสมอ ไม่งั้นจะ retry แล้วผู้ใช้จะได้ข้อความซ้ำ
   return NextResponse.json({ ok: true });
