@@ -332,7 +332,10 @@ async function onPostback(ev: Ev, userId: string) {
       await repo.track('renewed_by_new_copy', userId, { typeKey: doc.doc_type, from, to: pend.expiryDate, via: 'asked' });
       return reply(
         ev.replyToken,
-        M.renewedFromNewCopy({ typeKey: doc.doc_type, label: doc.label, from, to: pend.expiryDate, reminderDates: rows })
+        M.renewedFromNewCopy({
+          documentId: doc.id, typeKey: doc.doc_type, label: doc.label,
+          from, to: pend.expiryDate, reminderDates: rows, today,
+        })
       );
     }
 
@@ -351,7 +354,8 @@ async function onPostback(ev: Ev, userId: string) {
       await repo.setPending(userId, null);
       await repo.track('date_corrected', userId, { typeKey: doc.doc_type, from, to: pend.expiryDate, via: 'asked' });
       return reply(ev.replyToken, M.correctedDate({
-        typeKey: doc.doc_type, label: doc.label, from, to: pend.expiryDate, reminderDates: rows,
+        documentId: doc.id, typeKey: doc.doc_type, label: doc.label,
+        from, to: pend.expiryDate, reminderDates: rows, today,
       }));
     }
 
@@ -507,12 +511,14 @@ async function handleExisting(args: {
     if (kind === 'renewal') {
       await repo.track('renewed_by_new_copy', args.userId, { typeKey: args.typeKey, from, to: args.expiryDate });
       await reply(args.replyToken, M.renewedFromNewCopy({
-        typeKey: doc.doc_type, label: doc.label ?? args.label, from, to: args.expiryDate, reminderDates: rows,
+        documentId: doc.id, typeKey: doc.doc_type, label: doc.label ?? args.label,
+        from, to: args.expiryDate, reminderDates: rows, today: args.today,
       }));
     } else {
       await repo.track('date_corrected', args.userId, { typeKey: args.typeKey, from, to: args.expiryDate });
       await reply(args.replyToken, M.correctedDate({
-        typeKey: doc.doc_type, label: doc.label ?? args.label, from, to: args.expiryDate, reminderDates: rows,
+        documentId: doc.id, typeKey: doc.doc_type, label: doc.label ?? args.label,
+        from, to: args.expiryDate, reminderDates: rows, today: args.today,
       }));
     }
     return true;

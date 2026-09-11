@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
- * "รายการของฉัน" — เว็บเพจที่เปิดในแอป LINE
+ * "เอกสารของฉัน" — เว็บเพจที่เปิดในแอป LINE
  *
  * หน้านี้เคยบอกได้แค่ "เหลือกี่วัน" ซึ่งยังไม่ช่วยอะไร
  * คนที่เปิดมาเห็นว่าเหลือ 12 วัน ต้องการรู้ต่อว่า "แล้วต้องไปทำที่ไหน"
@@ -307,7 +307,7 @@ export default function LiffPage() {
   return (
     <div className="wrap" onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
       <div className="head">
-        <h1>📋 รายการของฉัน</h1>
+        <h1>📄 เอกสารของฉัน</h1>
         {docs.length > 0 && (
           <button
             className="link"

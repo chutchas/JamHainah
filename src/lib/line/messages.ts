@@ -20,6 +20,44 @@ const GREEN = '#06C755';
 const WARN = '#B8460E';
 const MUTED = '#8A9A93';
 
+/**
+ * ชื่อเดียวของหน้ารายการ
+ *
+ * เคยมีสามชื่อสำหรับที่เดียวกัน — "ดูรายการทั้งหมด" "รายการของฉัน" "ดูทั้งหมด"
+ * ผู้ใช้ต้องมานั่งเดาว่าสามปุ่มนี้พาไปที่เดียวกันไหม
+ * และ "รายการ" ในภาษาไทยกว้างเกินไป ("เอกสาร" บอกตรง ๆ ว่าข้างในมีอะไร)
+ * ชื่อนี้ตรงกับหัวข้อบนหน้าเว็บด้วย กดแล้วจะได้รู้ทันทีว่ามาถูกที่
+ */
+const LIST_NAME = 'เอกสารของฉัน';
+
+/**
+ * ชุดไอคอน — ความหมายเดียว ไอคอนเดียว ทั้งระบบ
+ *
+ * สองกฎที่ทำให้มันดูสะอาดบนทุกเครื่อง
+ *
+ * 1. action ประเภท camera / datetimepicker / location
+ *    LINE วาดไอคอนของตัวเองให้อยู่แล้ว ใส่ emoji ซ้ำจะได้ไอคอนสองอันติดกัน
+ *    (ปุ่ม "เพิ่มใบอื่น" เคยเป็นแบบนั้น) ปุ่มพวกนั้นจึงเป็นข้อความล้วน
+ *
+ * 2. เลือกเฉพาะ emoji ที่เป็นรูปทรงเรียบ สีเดียว
+ *    emoji ถูกวาดโดยระบบปฏิบัติการ ไม่ใช่โดยเรา
+ *    รูปละเอียดอย่าง 📸 หรือ 💻 หน้าตาต่างกันมากระหว่าง iPhone กับ Android
+ *    ส่วนรูปทรงง่าย ๆ อย่าง ➕ 📍 ✏️ เหมือนกันแทบทุกเครื่อง
+ */
+const I = {
+  list: '📄',
+  ok: '✅',
+  edit: '✏️',
+  renew: '🔄',
+  add: '➕',
+  map: '📍',
+  web: '🌐',
+  chat: '💬',
+  bell: '🔔',
+  warn: '⚠️',
+  date: '📅',
+} as const;
+
 /* ---------- helpers ---------- */
 
 export function pb(action: string, params: Record<string, string> = {}): string {
@@ -30,7 +68,7 @@ function text(t: string, quickReply?: LineMessage): LineMessage {
   return quickReply ? { type: 'text', text: t, quickReply } : { type: 'text', text: t };
 }
 
-function chips(items: Array<{ label: string; data?: string; date?: boolean; camera?: boolean; liff?: boolean; locate?: boolean }>): LineMessage {
+function chips(items: Array<{ label: string; data?: string; date?: boolean; camera?: boolean; liff?: boolean; locate?: boolean; initial?: string }>): LineMessage {
   return {
     items: items.slice(0, 13).map((c) => ({
       type: 'action',
@@ -46,7 +84,7 @@ function chips(items: Array<{ label: string; data?: string; date?: boolean; came
         : c.date
         ? {
             type: 'datetimepicker', label: c.label, data: c.data ?? pb('date'),
-            mode: 'date', initial: undefined,
+            mode: 'date', initial: c.initial,
           }
         : { type: 'postback', label: c.label, data: c.data!, displayText: c.label },
     })),
@@ -110,8 +148,8 @@ export function greeting(): LineMessage[] {
         'ถ่ายรูปเอกสารส่งมาได้เลย\n' +
         'ไม่ต้องสมัคร ไม่ต้องกรอกอะไรครับ',
       chips([
-        { label: '📸 ส่งรูปเอกสาร', camera: true },
-        { label: '📅 พิมพ์วันที่เอง', data: pb('manual') },
+        { label: 'ส่งรูปเอกสาร', camera: true },
+        { label: 'พิมพ์วันที่เอง', data: pb('manual') },
       ])
     ),
   ];
@@ -152,7 +190,7 @@ export function confirmExtracted(args: {
           type: 'button', style: 'link', height: 'sm',
           action: {
             type: 'datetimepicker',
-            label: '✏️ แก้ไขวันที่',
+            label: `${I.edit} แก้ไขวันที่`,
             data: pb('setdate', { d: args.documentId }),
             mode: 'date',
             initial: args.expiry,
@@ -173,8 +211,8 @@ export function alreadyConfirmed(typeKey: string, label: string | null | undefin
     text(
       `${displayName(typeKey, label)} ยืนยันไปแล้วครับ ✅\nหมดอายุ ${formatThai(expiry)}`,
       chips([
-        { label: '📋 ดูรายการทั้งหมด', liff: true },
-        { label: '📸 เพิ่มเอกสารอื่น', camera: true },
+        { label: `${I.list} ${LIST_NAME}`, liff: true },
+        { label: 'เพิ่มเอกสารอื่น', camera: true },
       ])
     ),
   ];
@@ -186,8 +224,8 @@ export function alreadyHave(typeKey: string, label: string | null | undefined, e
     text(
       `${displayName(typeKey, label)} มีอยู่ในรายการแล้วครับ\nหมดอายุ ${formatThai(expiry)}\n\nผมจะไม่บันทึกซ้ำนะครับ`,
       chips([
-        { label: '📋 ดูรายการทั้งหมด', liff: true },
-        { label: '📸 เพิ่มใบอื่น', camera: true },
+        { label: `${I.list} ${LIST_NAME}`, liff: true },
+        { label: 'เพิ่มเอกสารอื่น', camera: true },
       ])
     ),
   ];
@@ -200,38 +238,40 @@ export function alreadyHave(typeKey: string, label: string | null | undefined, e
  * ไม่ต้องทำอะไรเลยนอกจากถ่ายรูปใบใหม่
  */
 export function renewedFromNewCopy(args: {
+  documentId: string;
   typeKey: string;
   label?: string | null;
   from: ISODate;
   to: ISODate;
   reminderDates: Array<{ send_on: ISODate; offset_days: number }>;
+  today: ISODate;
 }): LineMessage[] {
-  const next = args.reminderDates.find((r) => r.offset_days < 0);
   return [
     text(
       `ต่ออายุแล้วนี่เอง ✅\n${displayName(args.typeKey, args.label)}\n\n` +
-        `${formatThai(args.from)} → ${formatThai(args.to)}\n\n` +
-        (next ? `ครั้งต่อไปผมจะเตือน ${formatThai(next.send_on)} ครับ` : 'ผมอัปเดตให้แล้วครับ'),
-      chips([{ label: '📋 ดูรายการทั้งหมด', liff: true }])
+        `${formatThai(args.from)} → ${formatThai(args.to)}` +
+        schedule(args.reminderDates, args.today),
+      confirmChips(args.documentId, args.to)
     ),
   ];
 }
 
 /** ขยับไม่กี่วัน = ครั้งก่อนอ่านผิด ไม่ใช่ต่ออายุ (ห้ามนับเป็น renewed_count) */
 export function correctedDate(args: {
+  documentId: string;
   typeKey: string;
   label?: string | null;
   from: ISODate;
   to: ISODate;
   reminderDates: Array<{ send_on: ISODate; offset_days: number }>;
+  today: ISODate;
 }): LineMessage[] {
-  const next = args.reminderDates.find((r) => r.offset_days < 0);
   return [
     text(
       `ครั้งก่อนผมอ่านผิดไปนิดครับ 🙏\n${displayName(args.typeKey, args.label)}\n\n` +
-        `แก้จาก ${formatThai(args.from)}\nเป็น ${formatThai(args.to)} ให้แล้ว\n\n` +
-        (next ? `ครั้งต่อไปผมจะเตือน ${formatThai(next.send_on)} ครับ` : ''),
-      chips([{ label: '📋 ดูรายการทั้งหมด', liff: true }])
+        `แก้จาก ${formatThai(args.from)}\nเป็น ${formatThai(args.to)} ให้แล้ว` +
+        schedule(args.reminderDates, args.today),
+      confirmChips(args.documentId, args.to)
     ),
   ];
 }
@@ -260,17 +300,17 @@ export function askRenewalOrNew(args: {
   if (args.reason === 'unclear_gap') {
     return [
       text(head + 'อันไหนถูกครับ', chips([
-        { label: '🔄 ต่ออายุแล้ว ใช้วันใหม่', data: pb('renew_existing', { d: args.existingId }) },
-        { label: '✏️ ครั้งก่อนอ่านผิด แก้เป็นวันใหม่', data: pb('fix_date', { d: args.existingId }) },
-        { label: '➕ คนละใบ', data: pb('as_new') },
+        { label: `${I.renew} ต่ออายุแล้ว ใช้วันใหม่`, data: pb('renew_existing', { d: args.existingId }) },
+        { label: `${I.edit} ครั้งก่อนอ่านผิด แก้เป็นวันใหม่`, data: pb('fix_date', { d: args.existingId }) },
+        { label: `${I.add} คนละใบ`, data: pb('as_new') },
       ])),
     ];
   }
 
   return [
     text(head + 'ใบนี้คืออันไหนครับ', chips([
-      { label: '🔄 ต่ออายุใบเดิม', data: pb('renew_existing', { d: args.existingId }) },
-      { label: '➕ คนละใบ/คนละคัน', data: pb('as_new') },
+      { label: `${I.renew} ต่ออายุใบเดิม`, data: pb('renew_existing', { d: args.existingId }) },
+      { label: `${I.add} คนละใบ/คนละคัน`, data: pb('as_new') },
     ])),
   ];
 }
@@ -295,8 +335,8 @@ export function askDate(args: { typeKey?: string; documentId?: string; reason?: 
 
   return [
     text(body, chips([
-      { label: '📅 เลือกวันที่', data, date: true },
-      { label: '📸 ถ่ายใหม่', camera: true },
+      { label: 'เลือกวันที่', data, date: true },
+      { label: 'ถ่ายใหม่', camera: true },
     ])),
   ];
 }
@@ -330,6 +370,27 @@ export function askType(ctx?: { expiry?: string | null; label?: string | null })
  * เขาเห็นสัญญาที่ตรวจสอบได้ ไม่ใช่คำโฆษณา
  * ============================================================ */
 /**
+ * ท้ายข้อความที่เพิ่งเปลี่ยนวันหมดอายุ
+ *
+ * ทุกครั้งที่วันเปลี่ยน ผู้ใช้ถามสองอย่างเสมอ: ตกลงจะเตือนฉันเมื่อไหร่
+ * และถ้าอ่านผิดอีกจะแก้ยังไง — ตอบทั้งสองอย่างไปพร้อมกันเลย
+ * ไม่ใช่บอกแค่รอบถัดไปรอบเดียวแล้วปล่อยให้เขาเดาว่ามีอีกไหม
+ */
+function schedule(rows: Array<{ send_on: ISODate; offset_days: number }>, today: ISODate): string {
+  const lines = reminderLines(rows, today);
+  if (lines.length === 0) return '\n\nผมอัปเดตให้แล้วครับ';
+  return `\n\nผมจะเตือนคุณ ${lines.length} ครั้ง\n${lines.join('\n')}\n\nลืมได้เลยครับ ผมจำให้แล้ว`;
+}
+
+/** ไม่มีปุ่ม "ถูกต้อง" เพราะบันทึกไปแล้ว — ปุ่มที่ยังมีความหมายคือปุ่มแก้ */
+function confirmChips(documentId: string, current: ISODate): LineMessage {
+  return chips([
+    { label: 'ไม่ใช่วันนี้ แก้ไข', data: pb('setdate', { d: documentId }), date: true, initial: current },
+    { label: `${I.list} ${LIST_NAME}`, liff: true },
+  ]);
+}
+
+/**
  * บรรทัด "จะเตือนวันไหนบ้าง"
  *
  * ใช้ร่วมกันระหว่างตอนบันทึกใหม่กับตอนกดต่อเองแล้ว
@@ -340,7 +401,7 @@ function reminderLines(rows: Array<{ send_on: ISODate; offset_days: number }>, t
     .filter((r) => r.offset_days <= 0 && r.send_on > today)
     .map((r) => {
       const when = r.offset_days <= -60 ? 'วันแรกที่ต่อได้' : `เหลือ ${Math.abs(r.offset_days)} วัน`;
-      return `📅 ${formatThai(r.send_on)} — ${when}`;
+      return `${I.date} ${formatThai(r.send_on)} — ${when}`;
     });
 }
 
@@ -402,7 +463,7 @@ export function savedAndSuggestMore(args: {
         `เยี่ยมครับ ตอนนี้ผมดูให้ ${args.docCount} รายการ 🎉\n\n` +
           (next ? `ครั้งต่อไปที่คุณจะได้ยินจากผม\nคือ ${formatThai(next.send_on)}\n\n` : '') +
           'ระหว่างนี้ผมจะเงียบครับ 🤫',
-        chips([{ label: '📋 ดูรายการทั้งหมด', liff: true }])
+        chips([{ label: `${I.list} ${LIST_NAME}`, liff: true }])
       )
     );
   } else {
@@ -456,7 +517,7 @@ export function upcomingReminder(
 
   const header = early
     ? `${t.emoji} ${t.label}${soonest.label ? ` ${soonest.label}` : ''}\nต่อได้ตั้งแต่วันนี้แล้วครับ`
-    : `${urgent ? '⚠️' : '🔔'} ${items.length > 1 ? 'มี ' + items.length + ' รายการใกล้ครบกำหนด' : displayName(soonest.typeKey, soonest.label)}`;
+    : `${urgent ? I.warn : I.bell} ${items.length > 1 ? 'มี ' + items.length + ' รายการใกล้ครบกำหนด' : displayName(soonest.typeKey, soonest.label)}`;
 
   const rows = items.map((it) => ({
     type: 'box', layout: 'vertical', spacing: 'xs',
@@ -519,8 +580,8 @@ export function upcomingReminder(
   // การ์ดรวมหลายใบ: ห้ามเดาว่าเขาต่อครบทุกใบ ให้เลือกทีละใบ
   footer.push(
     items.length > 1
-      ? button('✅ ต่อเองแล้ว', pb('renewed_pick'))
-      : button('✅ ต่อเองแล้ว', pb('renewed', { d: soonest.documentId }))
+      ? button(`${I.ok} ต่อเองแล้ว`, pb('renewed_pick'))
+      : button(`${I.ok} ต่อเองแล้ว`, pb('renewed', { d: soonest.documentId }))
   );
 
   const card = bubble(
@@ -538,7 +599,7 @@ export function upcomingReminder(
       `เตือน: ${displayName(soonest.typeKey, soonest.label)} ${humanRemaining(today, soonest.expiry)}`
   );
 
-  quick.push({ label: '📋 ดูรายการทั้งหมด', liff: true });
+  quick.push({ label: `${I.list} ${LIST_NAME}`, liff: true });
   card.quickReply = chips(quick);
   return [card];
 }
@@ -558,7 +619,7 @@ export function dueReminder(items: ReminderItem[]): LineMessage[] {
       text(
         `${displayName(first.typeKey, first.label)} ครบกำหนดเมื่อวานครับ\nต่อเรียบร้อยหรือยังครับ`,
         chips([
-          { label: '✅ ต่อแล้ว', data: pb('renewed', { d: first.documentId }) },
+          { label: `${I.ok} ต่อแล้ว`, data: pb('renewed', { d: first.documentId }) },
           { label: 'ยังเลย ช่วยที', data: pb('upsell', { d: first.documentId }) },
           { label: 'ไม่ได้ใช้แล้ว', data: pb('archive', { d: first.documentId }) },
         ])
@@ -585,7 +646,7 @@ export function dueReminder(items: ReminderItem[]): LineMessage[] {
       ],
       items.length > 4
         ? [{ type: 'button', style: 'link', height: 'sm',
-             action: { type: 'uri', label: '📋 ดูทั้งหมด', uri: env.liffUrl } }]
+             action: { type: 'uri', label: `${I.list} ${LIST_NAME}`, uri: env.liffUrl } }]
         : undefined,
       'มีเอกสารครบกำหนดแล้ว'
     ),
@@ -623,18 +684,7 @@ export function rolledOver(args: {
   return [
     text(
       `เยี่ยมครับ ✅\n${displayName(args.typeKey, args.label)}\nผมเลื่อนไปเป็น ${formatThai(args.newExpiry)} ให้แล้ว${schedule}`,
-      {
-        items: [
-          {
-            type: 'action',
-            action: {
-              type: 'datetimepicker', label: '✏️ ไม่ใช่วันนี้ แก้ไข',
-              data: pb('setdate', { d: args.documentId }), mode: 'date', initial: args.newExpiry,
-            },
-          },
-          { type: 'action', action: { type: 'uri', label: '📋 ดูรายการทั้งหมด', uri: env.liffUrl } },
-        ],
-      }
+      confirmChips(args.documentId, args.newExpiry)
     ),
   ];
 }
@@ -680,8 +730,8 @@ export function upsellIntro(typeKey: string): LineMessage[] {
         (price ? `ค่าบริการ ${price} บาท\n(ค่าภาษีจริงแจ้งอีกทีหลังคำนวณ)\n` : '') +
         'เสร็จภายใน 3 วันทำการ',
       chips([
-        { label: '📤 ส่งข้อมูล', data: pb('upsell_start', { k: typeKey }) },
-        { label: '💬 ขอถามก่อน', data: pb('human') },
+        { label: 'ส่งข้อมูล', data: pb('upsell_start', { k: typeKey }) },
+        { label: `${I.chat} ขอถามก่อน`, data: pb('human') },
       ])
     ),
   ];
@@ -698,7 +748,7 @@ export function nearbyPlaces(places: Array<{ label: string; url: string }>): Lin
   if (places.length === 0) {
     return [
       text('ขอบคุณครับ 🙏 ผมจำพื้นที่นี้ไว้ใช้แนะนำคราวหน้านะครับ',
-        chips([{ label: '📋 รายการของฉัน', liff: true }])),
+        chips([{ label: `${I.list} ${LIST_NAME}`, liff: true }])),
     ];
   }
   return [
@@ -715,8 +765,8 @@ export function notADocument(): LineMessage[] {
     text(
       'อันนี้ผมอ่านไม่ออกครับ 😅\nส่งรูปเอกสารที่มีวันหมดอายุมาได้เลย',
       chips([
-        { label: '📸 ถ่ายใหม่', camera: true },
-        { label: '📅 พิมพ์วันที่เอง', data: pb('manual') },
+        { label: 'ถ่ายใหม่', camera: true },
+        { label: 'พิมพ์วันที่เอง', data: pb('manual') },
       ])
     ),
   ];
@@ -751,9 +801,9 @@ export function listLink(liffUrl: string): LineMessage[] {
   return [
     {
       type: 'text',
-      text: 'เปิดดูรายการทั้งหมดได้ที่นี่ครับ',
+      text: `เปิดดู${LIST_NAME}ได้ที่นี่ครับ`,
       quickReply: {
-        items: [{ type: 'action', action: { type: 'uri', label: '📋 รายการของฉัน', uri: liffUrl } }],
+        items: [{ type: 'action', action: { type: 'uri', label: `${I.list} ${LIST_NAME}`, uri: liffUrl } }],
       },
     },
   ];
@@ -764,9 +814,9 @@ export function fallback(): LineMessage[] {
     text(
       'ผมช่วยจำวันหมดอายุเอกสารให้ครับ\nส่งรูปเอกสารมาได้เลย',
       chips([
-        { label: '📸 ส่งรูปเอกสาร', camera: true },
-        { label: '📋 รายการของฉัน', liff: true },
-        { label: '💬 คุยกับคน', data: pb('human') },
+        { label: 'ส่งรูปเอกสาร', camera: true },
+        { label: `${I.list} ${LIST_NAME}`, liff: true },
+        { label: `${I.chat} คุยกับคน`, data: pb('human') },
       ])
     ),
   ];
