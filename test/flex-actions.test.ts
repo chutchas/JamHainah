@@ -74,13 +74,28 @@ test('การ์ดอื่น ๆ ก็ต้องสะอาดเหม
   }
 });
 
-test('ปุ่มขอตำแหน่งยังต้องมีอยู่ แค่ย้ายไป quick reply', () => {
+test('ไม่มีชิปขอตำแหน่งในการ์ดเตือนแล้ว — ทำงานซ้ำกับปุ่มแผนที่', () => {
+  // แชร์พิกัดมาก็ได้ลิงก์ Google Maps อันเดิมกลับไป คือกดสามทีเพื่อผลลัพธ์ของการกดทีเดียว
+  // พิกัดที่เราอยากได้ไปเก็บที่หน้า LIFF แทน
   const actions = {
     national_id: [{ kind: 'location' as const, label: '📍 ที่ว่าการอำเภอ', searchTerm: 'ที่ว่าการอำเภอ' }],
   };
   const [card] = M.upcomingReminder([items[1]], '2026-11-15', actions) as any[];
   const types = (card.quickReply?.items ?? []).map((i: any) => i.action.type);
-  assert.ok(types.includes('location'), 'ต้องมีปุ่มขอตำแหน่งใน quick reply');
+  assert.ok(!types.includes('location'), 'ไม่ควรมีปุ่มขอตำแหน่งแล้ว');
+});
+
+test('ต่อเองแล้ว ต้องบอกรอบเตือนเหมือนตอนบันทึกใบใหม่', () => {
+  const [msg] = M.rolledOver({
+    documentId: 'd1', typeKey: 'vehicle_tax', label: '1กก 1234', newExpiry: '2027-12-15',
+    today: '2026-11-15',
+    reminderDates: [
+      { send_on: '2027-10-16', offset_days: -60 },
+      { send_on: '2027-11-15', offset_days: -30 },
+      { send_on: '2027-12-08', offset_days: -7 },
+    ],
+  }) as any[];
+  assert.match(msg.text, /ผมจะเตือนคุณ 3 ครั้ง/);
 });
 
 test('ปุ่ม "ใกล้ฉัน" ต้องค้นหาให้ทันที ไม่ใช่เปิดหน้าเลือกสถานที่เปล่า ๆ', () => {

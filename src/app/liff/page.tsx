@@ -249,7 +249,13 @@ export default function LiffPage() {
       if (Math.abs(dx) < 8) return;
       d.locked = true;
     }
-    d.dx = Math.max(-REVEAL, Math.min(REVEAL, dx));
+    /**
+     * ปุ่มลบโผล่อยู่แล้ว = แถวถูกดันไปทางซ้าย -REVEAL
+     * การปัดขวาตอนนี้คือ "เลื่อนกลับที่เดิม" ไม่ใช่การเริ่มท่าใหม่
+     * จึงต้องคิดระยะจากตำแหน่งที่แถวอยู่จริง ไม่ใช่จาก 0
+     */
+    const base = openId === d.id ? -REVEAL : 0;
+    d.dx = Math.max(-REVEAL, Math.min(REVEAL, base + dx));
     setDragDx(d.dx);
   }
   function onUp() {
@@ -260,15 +266,19 @@ export default function LiffPage() {
     swiped.current = true;
     setTimeout(() => { swiped.current = false; }, 0);
 
+    // กำลังเปิดปุ่มลบอยู่ — ปัดทางไหนก็แค่ตัดสินว่าจะปิดหรือเปิดค้างไว้
+    // ห้ามเด้งไปเปิดถาดต่ออายุ เพราะเจตนาของเขาคือ "ขอกลับไปหน้ารายการปกติ"
+    if (openId === d.id) {
+      if (d.dx > -OPEN_AT) setOpenId(null);
+      return;
+    }
+
     if (d.dx < -OPEN_AT) {
       setOpenId(d.id);
       setTrayId(null);
     } else if (d.dx > OPEN_AT) {
       // ถาดกางใต้แถว ไม่ใช่ค้างแถวไว้ทางขวา — ปุ่มภาษาไทยยาวเกินกว่าจะยัดในช่องแคบ
       setTrayId((cur) => (cur === d.id ? null : d.id));
-      setOpenId(null);
-    } else if (openId === d.id) {
-      setOpenId(null);
     }
   }
 
@@ -338,9 +348,10 @@ export default function LiffPage() {
                   onClick={() => {
                     if (swiped.current) return;
                     if (selectMode) return toggle(d.id);
+                    // ปุ่มลบเปิดอยู่ แตะที่แถวคือขอปิด ไม่ใช่ขอเปิดถาด
+                    if (openId === d.id) return setOpenId(null);
                     // แตะก็เปิดถาดได้ ไม่ใช่ทุกคนจะเดาท่าปัดขวาออก
                     setTrayId((c) => (c === d.id ? null : d.id));
-                    setOpenId(null);
                   }}
                 >
                   {selectMode && (

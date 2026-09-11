@@ -411,11 +411,12 @@ async function onPostback(ev: Ev, userId: string) {
 
       await repo.updateDocument(doc.id, { expiry_date: next, renewed_count: doc.renewed_count + 1 });
       const fresh = await repo.getDocument(doc.id);
-      if (fresh) await repo.regenerateReminders(fresh, today);
+      const rowsAfterRenew = fresh ? await repo.regenerateReminders(fresh, today) : [];
       await repo.track('renewed_self', userId, { typeKey: doc.doc_type, newExpiry: next });
 
       return reply(ev.replyToken, M.rolledOver({
         documentId: doc.id, typeKey: doc.doc_type, label: doc.label, newExpiry: next,
+        reminderDates: rowsAfterRenew, today,
       }));
     }
 

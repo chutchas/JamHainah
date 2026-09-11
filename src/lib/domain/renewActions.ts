@@ -85,7 +85,14 @@ export async function loadRenewActions(): Promise<Record<string, RenewAction[]>>
     if (error || !data || data.length === 0) return DEFAULT_RENEW_ACTIONS;
 
     const out: Record<string, RenewAction[]> = {};
+    const seen = new Set<string>();
     for (const r of data as Array<Record<string, string>>) {
+      // กันปุ่มซ้ำไว้อีกชั้น — migration 0007 เคยเผลอ seed ซ้ำมาแล้ว
+      // และปุ่มที่ขึ้นสองแถวเหมือนกันเป๊ะ ทำให้คนลังเลว่ากดอันไหนดี
+      const fingerprint = `${r.doc_type}|${r.label}`;
+      if (seen.has(fingerprint)) continue;
+      seen.add(fingerprint);
+
       (out[r.doc_type] ??= []).push({
         kind: r.kind as RenewActionKind,
         label: r.label,

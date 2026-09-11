@@ -329,6 +329,21 @@ export function askType(ctx?: { expiry?: string | null; label?: string | null })
  * "ผมจะเตือนคุณ N ครั้ง" + วันที่จริง คือข้อความที่ทำให้เขาไม่บล็อก
  * เขาเห็นสัญญาที่ตรวจสอบได้ ไม่ใช่คำโฆษณา
  * ============================================================ */
+/**
+ * บรรทัด "จะเตือนวันไหนบ้าง"
+ *
+ * ใช้ร่วมกันระหว่างตอนบันทึกใหม่กับตอนกดต่อเองแล้ว
+ * เพราะผู้ใช้คาดหวังคำตอบเดียวกัน: ตกลงแล้วจะเตือนฉันเมื่อไหร่
+ */
+function reminderLines(rows: Array<{ send_on: ISODate; offset_days: number }>, today: ISODate): string[] {
+  return rows
+    .filter((r) => r.offset_days <= 0 && r.send_on > today)
+    .map((r) => {
+      const when = r.offset_days <= -60 ? 'วันแรกที่ต่อได้' : `เหลือ ${Math.abs(r.offset_days)} วัน`;
+      return `📅 ${formatThai(r.send_on)} — ${when}`;
+    });
+}
+
 export function savedAndSuggestMore(args: {
   typeKey: string;
   reminderDates: Array<{ send_on: ISODate; offset_days: number }>;
@@ -347,10 +362,7 @@ export function savedAndSuggestMore(args: {
   const sentNow = upcoming.filter((r) => r.send_on <= args.today);
   const future = upcoming.filter((r) => r.send_on > args.today);
 
-  const lines = future.map((r) => {
-    const when = r.offset_days <= -60 ? 'วันแรกที่ต่อได้' : `เหลือ ${Math.abs(r.offset_days)} วัน`;
-    return `📅 ${formatThai(r.send_on)} — ${when}`;
-  });
+  const lines = reminderLines(future, args.today);
 
   // ทวนสิ่งที่บันทึกไปเสมอ ผู้ใช้เพิ่งเลือกวันที่มา ต้องเห็นว่าระบบรับไปถูก
   const summary = args.expiry
@@ -477,7 +489,6 @@ export function upcomingReminder(
    */
   const footer: LineMessage[] = [];
   const quick: Array<{ label: string; data?: string; liff?: boolean; locate?: boolean }> = [];
-  let hasNearby = false;
 
   for (const a of (actionsByType[soonest.typeKey] ?? []).slice(0, 4)) {
     if (a.kind === 'upsell') {
@@ -492,15 +503,17 @@ export function upcomingReminder(
       // ผู้ใช้เลยเจอร้านอาหารแถวบ้านแทนที่จะเจอที่ว่าการอำเภอ
       footer.push({ type: 'button', style: 'link', height: 'sm',
         action: { type: 'uri', label: a.label, uri: mapsSearchUrl(a.searchTerm) } });
-      hasNearby = true;
     }
   }
   /**
-   * แชร์ตำแหน่งเป็นทางเลือก ไม่ใช่ทางบังคับ
-   * ปุ่มข้างบนใช้ได้เลยโดยไม่ต้องขออะไร ส่วนอันนี้ไว้ให้คนที่อยากได้ผลแม่นกว่า
-   * (และเป็นทางเดียวที่เราจะรู้ว่าผู้ใช้อยู่โซนไหน — ไว้ไปหาร้านคู่ค้าแถวนั้น)
+   * ไม่มีชิป "แชร์ตำแหน่ง" ที่นี่แล้ว
+   *
+   * มันทำงานซ้ำกับปุ่มข้างบน — แชร์พิกัดมาก็ได้ลิงก์ Google Maps กลับไปอันเดิม
+   * ผู้ใช้จึงต้องกดสามที เพื่อให้ได้สิ่งที่กดทีเดียวก็ได้อยู่แล้ว
+   *
+   * ส่วนพิกัด (ที่เราอยากได้ไว้หาร้านคู่ค้า) ไปเก็บที่หน้า LIFF แทน
+   * ที่นั่นเบราว์เซอร์จำคำอนุญาตให้ ถามครั้งเดียวใช้ได้ตลอด
    */
-  if (hasNearby) quick.push({ label: '📌 บอกตำแหน่งให้แม่นขึ้น', locate: true });
   // การ์ดรวมหลายใบ: ห้ามเดาว่าเขาต่อครบทุกใบ ให้เลือกทีละใบ
   footer.push(
     items.length > 1
@@ -587,10 +600,25 @@ export function rolledOver(args: {
   typeKey: string;
   label?: string | null;
   newExpiry: ISODate;
+  /** รอบเตือนที่คำนวณใหม่ — ต้องบอกเหมือนตอนบันทึกใบใหม่ */
+  reminderDates?: Array<{ send_on: ISODate; offset_days: number }>;
+  today?: ISODate;
 }): LineMessage[] {
+  /**
+   * ต่ออายุแล้วก็ยังต้องได้คำตอบเดิมว่า "แล้วจะเตือนฉันเมื่อไหร่"
+   * ไม่บอก ผู้ใช้จะไม่รู้ว่าระบบยังดูให้อยู่ไหม แล้วต้องกลับมาเช็กเอง
+   * — ซึ่งเป็นสิ่งเดียวที่ผลิตภัณฑ์นี้สัญญาว่าเขาไม่ต้องทำ
+   */
+  const lines =
+    args.reminderDates && args.today ? reminderLines(args.reminderDates, args.today) : [];
+  const schedule =
+    lines.length > 0
+      ? `\n\nผมจะเตือนคุณ ${lines.length} ครั้ง\n${lines.join('\n')}\n\nลืมได้เลยครับ ผมจำให้แล้ว`
+      : '';
+
   return [
     text(
-      `เยี่ยมครับ ✅\n${displayName(args.typeKey, args.label)}\nผมเลื่อนไปเป็น ${formatThai(args.newExpiry)} ให้แล้ว`,
+      `เยี่ยมครับ ✅\n${displayName(args.typeKey, args.label)}\nผมเลื่อนไปเป็น ${formatThai(args.newExpiry)} ให้แล้ว${schedule}`,
       {
         items: [
           {
