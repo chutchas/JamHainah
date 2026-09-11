@@ -46,5 +46,11 @@ test('handlers.ts ใช้ reply เท่านั้น', () => {
   const root = path.resolve(import.meta.dirname, '..');
   const src = fs.readFileSync(path.join(root, 'src/lib/line/handlers.ts'), 'utf8');
   assert.ok(src.includes('reply'), 'handlers ต้องใช้ reply');
-  assert.ok(!/\bpush\s*\(/.test(src), 'handlers ห้ามเรียก push');
+
+  // ต้องมี lookbehind กันจุด ไม่งั้นไปจับ Array.prototype.push
+  // ซึ่งเป็นคำที่ใช้ทั่วไปมาก แล้ว test จะฟ้องผิดจนไม่มีใครเชื่อมันอีก
+  // test ที่ร้องเท็จบ่อย ๆ อันตรายกว่าไม่มี test เพราะคนจะเริ่มข้ามมัน
+  const linePushCall = /(?<![.\w])push\s*\(/;
+  const offending = src.split('\n').filter((l) => linePushCall.test(l));
+  assert.deepEqual(offending, [], `handlers ห้ามเรียก push():\n  ${offending.join('\n  ')}`);
 });
