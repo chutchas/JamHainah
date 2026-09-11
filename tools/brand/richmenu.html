@@ -1,63 +1,79 @@
 <!doctype html>
 <meta charset="utf-8">
 <style>
-  :root {
-    /* ไล่สีทแยงมุม เขียวอมฟ้าเข้มไปเขียวมิ้นต์อ่อน — ชุดเดียวกับไอคอนในแชท */
-    --teal: #0b8a72;
-    --green: #4fc49b;
-    --ink: #16211b;
-    --ink-2: #5d6b64;
-    --line: #e2e8e3;
-    --wash: #f3f8f4;
-  }
+  /* ไล่สีเดียวกับไอคอน — เขียวอมฟ้าเข้มไปเขียวมิ้นต์ ทแยงมุม องศาเดียวกันทั้งชุด */
+  :root { --teal: #0b8a72; --mint: #4fc49b; }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     width: 2500px; height: 843px;
     display: grid; grid-template-columns: repeat(3, 1fr);
-    background: #fff;
-    font-family: 'Noto Sans Thai', sans-serif;
+    font-family: 'Mali', sans-serif;
     -webkit-font-smoothing: antialiased;
+
+    /*
+      พื้นหลังเป็นภาพของ Tum — สัดส่วนสูงกว่า 2500x843 อยู่เล็กน้อย
+      จึงต้องตัดออก 178px และตัดจากขอบล่าง (จัดชิดบน)
+      เพื่อดันคลื่นลงไปใกล้ขอบล่าง เหลือพื้นที่โล่งด้านบนให้ไอคอนกับตัวอักษร
+      ถ้าตัดจากขอบบนแทน คลื่นจะลอยอยู่กลางภาพ แล้วครึ่งล่างจะว่างเปล่า
+    */
+    background: url('richmenu_background.png') center top / cover no-repeat, #eaf7f4;
   }
+
   .cell {
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
-    gap: 52px;
-    position: relative;
+    gap: 46px;
+    /*
+      ดันขึ้นจากกึ่งกลางเล็กน้อย เพราะส่วนล่างของพื้นหลังเป็นคลื่นสีเข้ม
+      ตัวอักษรเขียวทับตรงนั้นจะอ่านยาก
+    */
+    padding-bottom: 70px;
   }
-  .cell + .cell::before {
-    content: ''; position: absolute; left: 0; top: 170px; bottom: 170px;
-    width: 3px; background: var(--line);
+
+  .ico { width: 205px; height: 205px; }
+
+  .label {
+    font-size: 78px; font-weight: 700; line-height: 1.25;
+    background: linear-gradient(135deg, var(--teal) 0%, var(--mint) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    /* ขอบขาวบาง ๆ กันตัวอักษรจมไปกับลายพื้นหลัง */
+    filter: drop-shadow(0 0 10px rgba(255,255,255,.95)) drop-shadow(0 0 22px rgba(255,255,255,.8));
   }
-  /* ช่องแรกคือสิ่งที่อยากให้เขาทำที่สุด — พื้นอ่อน ๆ ดึงตาโดยไม่ต้องตะโกน */
-  .cell.lead { background: var(--wash); }
-  .ico { width: 210px; height: 210px; }
-  .label { font-size: 76px; font-weight: 600; color: var(--ink); letter-spacing: .01em; }
-  .sub { font-size: 50px; color: var(--ink-2); margin-top: -30px; }
 </style>
 
-<div class="cell lead">
+<div class="cell">
   <svg class="ico" viewBox="0 0 96 96" fill="none" stroke="url(#g1)" stroke-width="6.5"
-       stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b8a72"/><stop offset="1" stop-color="#4fc49b"/></linearGradient></defs>
+       stroke-linecap="round" stroke-linejoin="round">
     <path d="M22 36h10l6-8h20l6 8h10a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6H22a6 6 0 0 1-6-6V42a6 6 0 0 1 6-6z"/>
     <circle cx="48" cy="56" r="13"/>
+    <defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b8a72"/><stop offset="1" stop-color="#4fc49b"/>
+    </linearGradient></defs>
   </svg>
   <div class="label">เพิ่มเอกสาร</div>
 </div>
 
 <div class="cell">
   <svg class="ico" viewBox="0 0 96 96" fill="none" stroke="url(#g2)" stroke-width="6.5"
-       stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b8a72"/><stop offset="1" stop-color="#4fc49b"/></linearGradient></defs>
+       stroke-linecap="round" stroke-linejoin="round">
     <path d="M34 16h22l14 14v48a6 6 0 0 1-6 6H34a6 6 0 0 1-6-6V22a6 6 0 0 1 6-6z"/>
     <path d="M56 16v14h14"/>
     <path d="M40 54h18M40 66h12"/>
+    <defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b8a72"/><stop offset="1" stop-color="#4fc49b"/>
+    </linearGradient></defs>
   </svg>
   <div class="label">เอกสารของฉัน</div>
 </div>
 
 <div class="cell">
   <svg class="ico" viewBox="0 0 96 96" fill="none" stroke="url(#g3)" stroke-width="6.5"
-       stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="g3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b8a72"/><stop offset="1" stop-color="#4fc49b"/></linearGradient></defs>
+       stroke-linecap="round" stroke-linejoin="round">
     <path d="M24 26h48a7 7 0 0 1 7 7v26a7 7 0 0 1-7 7H46L30 80V66h-6a7 7 0 0 1-7-7V33a7 7 0 0 1 7-7z"/>
+    <defs><linearGradient id="g3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b8a72"/><stop offset="1" stop-color="#4fc49b"/>
+    </linearGradient></defs>
   </svg>
   <div class="label">คุยกับคน</div>
 </div>
