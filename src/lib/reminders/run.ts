@@ -18,6 +18,7 @@ import { push } from '@/lib/line/client';
 import { upcomingReminder, dueReminder, type ReminderItem } from '@/lib/line/messages';
 import { todayInBangkok } from '@/lib/domain/thaiDate';
 import { track } from '@/lib/db/repo';
+import { loadRenewActions } from '@/lib/domain/renewActions';
 
 interface QueueRow {
   id: string;
@@ -36,6 +37,8 @@ interface QueueRow {
 export async function runReminders() {
   const supabase = db();
   const today = todayInBangkok();
+  // อ่านครั้งเดียวต่อรอบ ไม่ใช่ทุกผู้ใช้
+  const actionsByType = await loadRenewActions();
 
   // คิวของวันนี้และที่ค้างมาจากวันก่อน (เผื่อ cron ล่ม)
   const { data, error } = await supabase
@@ -87,7 +90,7 @@ export async function runReminders() {
     try {
       if (bucket.upcoming.length) {
         const items = bucket.upcoming.map(toItem);
-        await push(userId, upcomingReminder(items, today));
+        await push(userId, upcomingReminder(items, today, actionsByType));
         sentMessages++;
         ok.push(...bucket.upcoming.map((r) => r.id));
       }

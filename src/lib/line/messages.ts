@@ -12,6 +12,7 @@
 import { ASK_TYPE_CHOICES, DocType, SUGGEST_BY_GROUP, displayName, docType } from '@/lib/domain/docTypes';
 import { ISODate, daysBetween, formatThai, humanRemaining } from '@/lib/domain/thaiDate';
 import { env } from '@/lib/env';
+import type { RenewAction } from '@/lib/domain/renewActions';
 
 export type LineMessage = Record<string, unknown>;
 
@@ -404,7 +405,11 @@ export interface ReminderItem {
   offsetDays: number;
 }
 
-export function upcomingReminder(items: ReminderItem[], today: ISODate): LineMessage[] {
+export function upcomingReminder(
+  items: ReminderItem[],
+  today: ISODate,
+  actionsByType: Record<string, RenewAction[]> = {}
+): LineMessage[] {
   if (items.length === 0) return [];
 
   const soonest = items.reduce((a, b) => (a.expiry <= b.expiry ? a : b));
@@ -431,11 +436,24 @@ export function upcomingReminder(items: ReminderItem[], today: ISODate): LineMes
     ],
   })) as LineMessage[];
 
-  const upsellType = items.map((i) => docType(i.typeKey)).find((t2) => t2.tier === 1 && t2.upsell);
+  /**
+   * ปุ่มมาจากวิธีต่ออายุจริงของเอกสารนั้น ไม่ใช่ชุดเดียวใช้ทุกใบ
+   * เอกสารที่เราหาเงินไม่ได้ (บัตรประชาชน พาสปอร์ต) ต้องยังมีประโยชน์
+   * ไม่งั้นการเตือนกลายเป็นแค่การรบกวน
+   */
   const footer: LineMessage[] = [];
-  if (upsellType?.upsell) {
-    const priceSuffix = upsellType.upsell.price ? ` · ${upsellType.upsell.price}฿` : '';
-    footer.push(button(`🛵 ${upsellType.upsell.label}${priceSuffix}`, pb('upsell', { d: soonest.documentId }), 'primary'));
+  for (const a of (actionsByType[soonest.typeKey] ?? []).slice(0, 3)) {
+    if (a.kind === 'upsell') {
+      const price = docType(soonest.typeKey).upsell?.price;
+      footer.push(button(`${a.label}${price ? ` · ${price}฿` : ''}`, pb('upsell', { d: soonest.documentId }), 'primary'));
+    } else if (a.kind === 'link' && a.url) {
+      footer.push({ type: 'button', style: 'link', height: 'sm',
+        action: { type: 'uri', label: a.label, uri: a.url } });
+    } else if (a.kind === 'location') {
+      // location action เปิดหน้าเลือกตำแหน่งของ LINE แล้วส่งพิกัดกลับมาเป็นข้อความ
+      footer.push({ type: 'button', style: 'link', height: 'sm',
+        action: { type: 'location', label: a.label } });
+    }
   }
   // การ์ดรวมหลายใบ: ห้ามเดาว่าเขาต่อครบทุกใบ ให้เลือกทีละใบ
   footer.push(
@@ -592,6 +610,26 @@ export function upsellIntro(typeKey: string): LineMessage[] {
 /* ============================================================
  * ฉาก 11 — กรณีขอบ
  * ============================================================ */
+/**
+ * ผู้ใช้แชร์พิกัดมา — ตอบด้วยลิงก์แผนที่ของสถานที่ที่เขาต้องไปจริง
+ * เลือกจากเอกสารที่ใกล้ครบกำหนดที่สุดของเขา ไม่ใช่รายการทั่วไป
+ */
+export function nearbyPlaces(places: Array<{ label: string; url: string }>): LineMessage[] {
+  if (places.length === 0) {
+    return [
+      text('ขอบคุณครับ 🙏 ผมจำพื้นที่นี้ไว้ใช้แนะนำคราวหน้านะครับ',
+        chips([{ label: '📋 รายการของฉัน', liff: true }])),
+    ];
+  }
+  return [
+    text('แถวนี้มีที่ไหนบ้าง กดดูได้เลยครับ 📍', {
+      items: places.slice(0, 4).map((p) => ({
+        type: 'action', action: { type: 'uri', label: p.label, uri: p.url },
+      })),
+    }),
+  ];
+}
+
 export function notADocument(): LineMessage[] {
   return [
     text(

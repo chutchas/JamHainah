@@ -11,6 +11,7 @@ import { docType } from '@/lib/domain/docTypes';
 import { isISODate, todayInBangkok } from '@/lib/domain/thaiDate';
 import { env } from '@/lib/env';
 import { rolloverExpiry } from '@/lib/domain/reminders';
+import { loadRenewActions, mapsSearchUrl } from '@/lib/domain/renewActions';
 import * as repo from '@/lib/db/repo';
 
 type Ev = Record<string, any>;
@@ -45,6 +46,7 @@ async function onMessage(ev: Ev, userId: string) {
   const msg = ev.message;
 
   if (msg?.type === 'image') return onImage(ev, userId, msg.id);
+  if (msg?.type === 'location') return onLocation(ev, userId, msg);
 
   if (msg?.type === 'text') {
     const t = String(msg.text ?? '').trim();
@@ -64,6 +66,39 @@ async function onMessage(ev: Ev, userId: string) {
   }
 
   return reply(ev.replyToken, M.fallback());
+}
+
+/**
+ * ผู้ใช้กดปุ่ม "📍 ...ใกล้ฉัน" แล้วแชร์พิกัดมา
+ *
+ * ตอบด้วยลิงก์ค้นหา Google Maps ของสถานที่ที่เขาต้องไปจริง
+ * โดยดูจากเอกสารที่เขามีอยู่ ไม่ใช่รายการทั่วไป
+ */
+async function onLocation(ev: Ev, userId: string, msg: Record<string, any>) {
+  const lat = Number(msg.latitude);
+  const lng = Number(msg.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return reply(ev.replyToken, M.fallback());
+
+  await repo.saveUserArea(userId, { lat, lng, label: msg.address ?? msg.title ?? null });
+  await repo.track('area_shared', userId);
+
+  const [docs, actionsByType] = await Promise.all([
+    repo.listDocuments(userId),
+    loadRenewActions(),
+  ]);
+
+  // เอกสารเรียงตามใกล้ครบกำหนดอยู่แล้ว — หยิบปุ่มแบบ location ของแต่ละใบมา
+  const places: Array<{ label: string; url: string }> = [];
+  const seen = new Set<string>();
+  for (const d of docs) {
+    for (const a of actionsByType[d.doc_type] ?? []) {
+      if (a.kind !== 'location' || !a.searchTerm || seen.has(a.searchTerm)) continue;
+      seen.add(a.searchTerm);
+      places.push({ label: a.label, url: mapsSearchUrl(a.searchTerm, lat, lng) });
+    }
+  }
+
+  return reply(ev.replyToken, M.nearbyPlaces(places));
 }
 
 /* ---------------- ฉาก 02 / 02b ---------------- */
