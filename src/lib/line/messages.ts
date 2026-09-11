@@ -30,11 +30,14 @@ function text(t: string, quickReply?: LineMessage): LineMessage {
   return quickReply ? { type: 'text', text: t, quickReply } : { type: 'text', text: t };
 }
 
-function chips(items: Array<{ label: string; data?: string; date?: boolean; camera?: boolean; liff?: boolean }>): LineMessage {
+function chips(items: Array<{ label: string; data?: string; date?: boolean; camera?: boolean; liff?: boolean; locate?: boolean }>): LineMessage {
   return {
     items: items.slice(0, 13).map((c) => ({
       type: 'action',
-      action: c.liff
+      action: c.locate
+        // location action ใช้ได้เฉพาะที่นี่ ห้ามย้ายไป Flex button
+        ? { type: 'location', label: c.label }
+        : c.liff
         // uri action เปิด LIFF ทันทีที่กด — ไม่ต้องวิ่งเข้าเซิร์ฟเวอร์
         // ไม่เสียค่าข้อความ และผู้ใช้กดครั้งเดียวจบ
         ? { type: 'uri', label: c.label, uri: env.liffUrl }
@@ -453,8 +456,19 @@ export function upcomingReminder(
    * เอกสารที่เราหาเงินไม่ได้ (บัตรประชาชน พาสปอร์ต) ต้องยังมีประโยชน์
    * ไม่งั้นการเตือนกลายเป็นแค่การรบกวน
    */
+  /**
+   * ⚠️ LINE ให้ location / camera / cameraRoll ใช้ได้เฉพาะใน quick reply
+   *    ใส่ลง Flex button เมื่อไหร่ ข้อความจะไม่ผ่าน validation ทั้งก้อน
+   *    ตอบกลับมาแค่ 400 "message is invalid" โดยไม่บอกว่าฟิลด์ไหน
+   *    แล้วผู้ใช้จะเจอความเงียบสนิท เพราะ reply token ถูกใช้ไปแล้ว
+   *
+   * ปุ่มจึงต้องแยกสองที่: กดในการ์ดได้เฉพาะ postback/uri
+   * ส่วนขอตำแหน่งไปอยู่เป็นชิปด้านล่าง
+   */
   const footer: LineMessage[] = [];
-  for (const a of (actionsByType[soonest.typeKey] ?? []).slice(0, 3)) {
+  const quick: Array<{ label: string; data?: string; liff?: boolean; locate?: boolean }> = [];
+
+  for (const a of (actionsByType[soonest.typeKey] ?? []).slice(0, 4)) {
     if (a.kind === 'upsell') {
       const price = docType(soonest.typeKey).upsell?.price;
       footer.push(button(`${a.label}${price ? ` · ${price}฿` : ''}`, pb('upsell', { d: soonest.documentId }), 'primary'));
@@ -462,9 +476,7 @@ export function upcomingReminder(
       footer.push({ type: 'button', style: 'link', height: 'sm',
         action: { type: 'uri', label: a.label, uri: a.url } });
     } else if (a.kind === 'location') {
-      // location action เปิดหน้าเลือกตำแหน่งของ LINE แล้วส่งพิกัดกลับมาเป็นข้อความ
-      footer.push({ type: 'button', style: 'link', height: 'sm',
-        action: { type: 'location', label: a.label } });
+      quick.push({ label: a.label, locate: true });
     }
   }
   // การ์ดรวมหลายใบ: ห้ามเดาว่าเขาต่อครบทุกใบ ให้เลือกทีละใบ
@@ -474,8 +486,7 @@ export function upcomingReminder(
       : button('✅ ต่อเองแล้ว', pb('renewed', { d: soonest.documentId }))
   );
 
-  return [
-    bubble(
+  const card = bubble(
       [
         { type: 'text', text: header, weight: 'bold', size: 'md', wrap: true },
         ...(early && t.renewWindowDays
@@ -486,8 +497,11 @@ export function upcomingReminder(
       ],
       footer,
       `เตือน: ${displayName(soonest.typeKey, soonest.label)} ${humanRemaining(today, soonest.expiry)}`
-    ),
-  ];
+  );
+
+  quick.push({ label: '📋 ดูรายการทั้งหมด', liff: true });
+  card.quickReply = chips(quick);
+  return [card];
 }
 
 /* ============================================================
