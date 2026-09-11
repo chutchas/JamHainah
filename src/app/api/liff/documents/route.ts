@@ -5,21 +5,21 @@
  * LIFF ไม่คุยกับ Supabase ตรง ๆ (RLS ปิดทุกอย่างไว้) ต้องผ่านที่นี่เสมอ
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyLiffIdToken } from '@/lib/line/client';
-import { env } from '@/lib/env';
+import { authenticateLiff as authenticate } from '@/lib/line/liffAuth';
 import * as repo from '@/lib/db/repo';
 import { docType } from '@/lib/domain/docTypes';
 import { formatThai, daysBetween, todayInBangkok } from '@/lib/domain/thaiDate';
+import { loadRenewActions, mapsSearchUrl } from '@/lib/domain/renewActions';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-async function authenticate(req: NextRequest): Promise<string | null> {
-  const idToken = req.headers.get('x-liff-id-token');
-  if (!idToken) return null;
-  // env.line.loginChannelId โยน error ถ้าไม่ได้ตั้งค่า — ดีกว่าคืน 401 เงียบ ๆ
-  // แล้วปล่อยให้ไล่หาสาเหตุเองว่าทำไมหน้ารายการเปิดไม่ได้
-  return verifyLiffIdToken(idToken, env.line.loginChannelId);
+/** ปุ่ม "แล้วต้องไปทำที่ไหน" ที่ส่งให้หน้าเว็บ — รูปร่างเดียวกับที่ page.tsx รับ */
+interface DocAction {
+  kind: 'upsell' | 'link' | 'map';
+  label: string;
+  url?: string;
+  term?: string;
 }
 
 export async function GET(req: NextRequest) {
@@ -27,10 +27,16 @@ export async function GET(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
   const today = todayInBangkok();
-  const docs = await repo.listDocuments(userId);
+  const [docs, actionsByType, area] = await Promise.all([
+    repo.listDocuments(userId),
+    loadRenewActions(),
+    repo.getUserArea(userId),
+  ]);
 
   return NextResponse.json({
     today,
+    /** มีพิกัดแล้วหรือยัง — หน้าเว็บใช้ตัดสินใจว่าจะชวนเปิดตำแหน่งไหม */
+    hasArea: area !== null,
     documents: docs.map((d) => {
       const t = docType(d.doc_type);
       const days = daysBetween(today, d.expiry_date);
@@ -44,6 +50,23 @@ export async function GET(req: NextRequest) {
         days,
         status: days < 0 ? 'overdue' : days <= 30 ? 'soon' : days <= 90 ? 'watch' : 'ok',
         confirmed: d.confirmed_by_user,
+        /**
+         * "เหลือกี่วัน" อย่างเดียวไม่พอ — รู้ว่าเหลือ 12 วันแล้วต้องไปทำอะไรต่อ
+         * ปุ่มชุดนี้คือคำตอบ และมาจากตาราง renew_actions ชุดเดียวกับที่ใช้ในแชท
+         * จะได้ไม่มีวันที่แชทบอกอย่าง หน้าเว็บบอกอีกอย่าง
+         */
+        actions: (actionsByType[d.doc_type] ?? []).slice(0, 4).flatMap((a): DocAction[] => {
+          if (a.kind === 'upsell') return [{ kind: 'upsell', label: a.label }];
+          if (a.kind === 'link' && a.url) return [{ kind: 'link', label: a.label, url: a.url }];
+          if (a.kind === 'location' && a.searchTerm) {
+            // มีพิกัดก็ปักหมุดให้ ไม่มีก็ยังกดได้ — Google Maps ใช้ตำแหน่งของเครื่องเอง
+            return [{
+              kind: 'map', label: a.label, term: a.searchTerm,
+              url: mapsSearchUrl(a.searchTerm, area?.lat, area?.lng),
+            }];
+          }
+          return [];
+        }),
       };
     }),
   });

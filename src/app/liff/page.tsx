@@ -5,10 +5,24 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 /**
  * "รายการของฉัน" — เว็บเพจที่เปิดในแอป LINE
  *
- * การลบมีสองทาง เพราะคนละสถานการณ์:
- *   ปัดซ้าย     ลบทีละใบ — ท่าที่คนใช้ LINE ทำเป็นอยู่แล้ว ไม่ต้องสอน
- *   โหมดเลือก   ลบหลายใบ — สำหรับตอนเก็บกวาดของเก่า
+ * หน้านี้เคยบอกได้แค่ "เหลือกี่วัน" ซึ่งยังไม่ช่วยอะไร
+ * คนที่เปิดมาเห็นว่าเหลือ 12 วัน ต้องการรู้ต่อว่า "แล้วต้องไปทำที่ไหน"
+ *
+ * ปัดสองทาง เพราะเป็นคนละเจตนากัน:
+ *   ปัดซ้าย   ลบ        — ท่าที่คนใช้ LINE ทำเป็นอยู่แล้ว ไม่ต้องสอน
+ *   ปัดขวา    ต่ออายุ   — แผนที่ / ลิงก์ราชการ / ให้เราต่อให้
+ *   โหมดเลือก ลบหลายใบ  — สำหรับตอนเก็บกวาดของเก่า
  */
+
+type ActionKind = 'upsell' | 'link' | 'map';
+
+interface DocAction {
+  kind: ActionKind;
+  label: string;
+  url?: string;
+  /** เฉพาะ map — เก็บไว้สร้างลิงก์ใหม่เมื่อได้พิกัดมาระหว่างเปิดหน้าอยู่ */
+  term?: string;
+}
 
 interface Doc {
   id: string;
@@ -19,13 +33,20 @@ interface Doc {
   days: number;
   status: 'ok' | 'watch' | 'soon' | 'overdue';
   confirmed: boolean;
+  actions: DocAction[];
 }
 
 declare global {
   interface Window { liff?: any }
 }
 
-const REVEAL = 88; // ความกว้างปุ่มลบที่โผล่มาตอนปัด
+const REVEAL = 88;  // ความกว้างปุ่มลบที่โผล่มาตอนปัดซ้าย
+const OPEN_AT = 44; // ปัดเกินเท่านี้ถือว่าตั้งใจ
+
+function mapUrl(term: string, lat?: number, lng?: number) {
+  const q = `https://www.google.com/maps/search/${encodeURIComponent(term)}`;
+  return lat != null && lng != null ? `${q}/@${lat},${lng},14z` : q;
+}
 
 export default function LiffPage() {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -33,12 +54,19 @@ export default function LiffPage() {
   const [message, setMessage] = useState('');
   const [token, setToken] = useState<string | null>(null);
 
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null); // ปัดซ้ายค้างไว้ = ปุ่มลบโผล่
+  const [trayId, setTrayId] = useState<string | null>(null); // ปัดขวา = ถาดต่ออายุกางอยู่
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
 
-  const drag = useRef<{ id: string; startX: number; dx: number } | null>(null);
+  const [askArea, setAskArea] = useState(false); // ยังไม่มีพิกัด — ชวนเปิด
+  const [areaBusy, setAreaBusy] = useState(false);
+  const [leadSent, setLeadSent] = useState<Set<string>>(new Set());
+
+  const drag = useRef<{ id: string; startX: number; startY: number; dx: number; locked: boolean } | null>(null);
+  /** ปัดจบแล้ว browser ยิง click ตามมาเสมอ — ถ้าไม่กันไว้ การปัดซ้ายจะไปเปิดถาดด้วย */
+  const swiped = useRef(false);
   const [dragDx, setDragDx] = useState(0);
 
   const load = useCallback(async (idToken: string) => {
@@ -46,7 +74,42 @@ export default function LiffPage() {
     if (!res.ok) throw new Error(`โหลดรายการไม่สำเร็จ (${res.status})`);
     const data = await res.json();
     setDocs(data.documents ?? []);
+    return data as { hasArea?: boolean };
   }, []);
+
+  /**
+   * เขียนพิกัดกลับเข้าปุ่มแผนที่ทันที ไม่ต้องโหลดรายการใหม่
+   * ผู้ใช้เพิ่งกดอนุญาต เขากำลังรอกดปุ่มต่อ
+   */
+  const applyCoords = useCallback((lat: number, lng: number) => {
+    setDocs((prev) =>
+      prev.map((d) => ({
+        ...d,
+        actions: d.actions.map((a) =>
+          a.kind === 'map' && a.term ? { ...a, url: mapUrl(a.term, lat, lng) } : a
+        ),
+      }))
+    );
+  }, []);
+
+  const sendArea = useCallback(
+    async (idToken: string, lat: number, lng: number) => {
+      try {
+        const res = await fetch('/api/liff/area', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-liff-id-token': idToken },
+          body: JSON.stringify({ lat, lng }),
+        });
+        if (!res.ok) return;
+        const saved = await res.json();
+        applyCoords(saved.lat, saved.lng);
+        setAskArea(false);
+      } catch {
+        // ไม่ได้พิกัดก็ยังใช้งานได้ครบ — ปุ่มแผนที่ทำงานโดยไม่ต้องมีพิกัดอยู่แล้ว
+      }
+    },
+    [applyCoords]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -72,15 +135,72 @@ export default function LiffPage() {
         if (cancelled) return;
 
         setToken(idToken);
-        await load(idToken);
-        if (!cancelled) setState('ready');
+        const data = await load(idToken);
+        if (cancelled) return;
+        setState('ready');
+
+        /**
+         * ขอพิกัดที่นี่ ไม่ใช่ในแชท
+         *
+         * ในแชท LINE เปิดได้แค่หน้าเลือกสถานที่ ซึ่งไม่รับคำค้นของเรา
+         * ผู้ใช้กดปุ่ม "ที่ว่าการอำเภอใกล้ฉัน" แล้วเจอร้านอาหารแถวบ้าน
+         *
+         * ในเว็บ เบราว์เซอร์จำคำอนุญาตให้ ถามครั้งเดียวใช้ได้ตลอด
+         * และถ้าเคยอนุญาตไว้แล้ว อ่านเงียบ ๆ ได้เลยโดยไม่ต้องเด้งถามซ้ำ
+         */
+        if (!navigator.geolocation) return;
+        let status: string | null = null;
+        try {
+          const p = await navigator.permissions?.query({ name: 'geolocation' as PermissionName });
+          status = p?.state ?? null;
+        } catch {
+          // เบราว์เซอร์เก่าไม่มี permissions API — ถือว่ายังไม่เคยถาม
+        }
+        if (status === 'granted') {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => { if (!cancelled) sendArea(idToken, pos.coords.latitude, pos.coords.longitude); },
+            () => {},
+            { maximumAge: 600000, timeout: 8000 }
+          );
+        } else if (status !== 'denied' && !data?.hasArea) {
+          // ไม่เด้ง permission เอง — เด้งแล้วเขากดปฏิเสธ เบราว์เซอร์จำไว้ ขอใหม่ไม่ได้อีก
+          // ชวนด้วยแถบเล็ก ๆ ให้เขาเห็นก่อนว่าเราจะเอาไปทำอะไร
+          setAskArea(true);
+        }
       } catch (err) {
         if (!cancelled) { setMessage(err instanceof Error ? err.message : String(err)); setState('error'); }
       }
     }
     boot();
     return () => { cancelled = true; };
-  }, [load]);
+  }, [load, sendArea]);
+
+  function requestArea() {
+    if (!token || !navigator.geolocation) return;
+    setAreaBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        await sendArea(token, pos.coords.latitude, pos.coords.longitude);
+        setAreaBusy(false);
+      },
+      () => { setAreaBusy(false); setAskArea(false); },
+      { enableHighAccuracy: false, timeout: 10000 }
+    );
+  }
+
+  async function requestLead(doc: Doc) {
+    if (!token) return;
+    setLeadSent((prev) => new Set(prev).add(doc.id));
+    try {
+      await fetch('/api/liff/lead', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-liff-id-token': token },
+        body: JSON.stringify({ documentId: doc.id }),
+      });
+    } catch {
+      // บันทึกไม่ได้ก็ไม่ต้องทำให้ผู้ใช้ตกใจ เดี๋ยวทักมาในแชทได้อยู่ดี
+    }
+  }
 
   async function deleteIds(ids: string[]) {
     if (!token || ids.length === 0) return;
@@ -96,6 +216,7 @@ export default function LiffPage() {
       setDocs((d) => d.filter((x) => !ids.includes(x.id)));
       setSelected(new Set());
       setOpenId(null);
+      setTrayId(null);
     } finally {
       setBusy(false);
     }
@@ -113,24 +234,42 @@ export default function LiffPage() {
     } finally { setBusy(false); }
   }
 
-  /* ---- ปัดซ้าย ---- */
+  /* ---- ปัดซ้าย = ลบ / ปัดขวา = ต่ออายุ ---- */
   function onDown(e: React.PointerEvent, id: string) {
     if (selectMode) return;
-    drag.current = { id, startX: e.clientX, dx: 0 };
+    drag.current = { id, startX: e.clientX, startY: e.clientY, dx: 0, locked: false };
   }
   function onMove(e: React.PointerEvent) {
-    if (!drag.current) return;
-    const dx = Math.max(-REVEAL, Math.min(0, e.clientX - drag.current.startX));
-    drag.current.dx = dx;
-    setDragDx(dx);
+    const d = drag.current;
+    if (!d) return;
+    const dx = e.clientX - d.startX;
+    // เลื่อนหน้าลงแล้วนิ้วเบี้ยวนิดหน่อย ไม่ควรกลายเป็นการปัด
+    if (!d.locked) {
+      if (Math.abs(e.clientY - d.startY) > 12 && Math.abs(dx) < 12) { drag.current = null; setDragDx(0); return; }
+      if (Math.abs(dx) < 8) return;
+      d.locked = true;
+    }
+    d.dx = Math.max(-REVEAL, Math.min(REVEAL, dx));
+    setDragDx(d.dx);
   }
   function onUp() {
     const d = drag.current;
     drag.current = null;
     setDragDx(0);
-    if (!d) return;
-    if (d.dx < -REVEAL / 2) setOpenId(d.id);
-    else if (openId === d.id) setOpenId(null);
+    if (!d || !d.locked) return;
+    swiped.current = true;
+    setTimeout(() => { swiped.current = false; }, 0);
+
+    if (d.dx < -OPEN_AT) {
+      setOpenId(d.id);
+      setTrayId(null);
+    } else if (d.dx > OPEN_AT) {
+      // ถาดกางใต้แถว ไม่ใช่ค้างแถวไว้ทางขวา — ปุ่มภาษาไทยยาวเกินกว่าจะยัดในช่องแคบ
+      setTrayId((cur) => (cur === d.id ? null : d.id));
+      setOpenId(null);
+    } else if (openId === d.id) {
+      setOpenId(null);
+    }
   }
 
   function offsetFor(id: string) {
@@ -158,12 +297,22 @@ export default function LiffPage() {
         {docs.length > 0 && (
           <button
             className="link"
-            onClick={() => { setSelectMode((v) => !v); setSelected(new Set()); setOpenId(null); }}
+            onClick={() => { setSelectMode((v) => !v); setSelected(new Set()); setOpenId(null); setTrayId(null); }}
           >
             {selectMode ? 'ยกเลิก' : '☑︎ เลือก'}
           </button>
         )}
       </div>
+
+      {askArea && !selectMode && docs.length > 0 && (
+        <div className="ask">
+          <span className="ask-t">📍 เปิดตำแหน่งไว้ เราจะได้แนะนำที่ใกล้คุณได้ตรงขึ้น</span>
+          <button className="link" onClick={requestArea} disabled={areaBusy}>
+            {areaBusy ? 'กำลังอ่าน…' : 'เปิด'}
+          </button>
+          <button className="link mute" onClick={() => setAskArea(false)}>ไม่เอา</button>
+        </div>
+      )}
 
       {selectMode && docs.length > 0 && (
         <button
@@ -179,29 +328,64 @@ export default function LiffPage() {
           <div className="empty">ยังไม่มีเอกสารครับ<br />ส่งรูปเอกสารเข้าแชทได้เลย</div>
         ) : (
           docs.map((d) => (
-            <div className="swipe" key={d.id}>
-              <button className="swipe-del" onClick={() => deleteIds([d.id])} disabled={busy}>ลบ</button>
-              <div
-                className={`doc${selectMode ? ' picking' : ''}`}
-                style={{ transform: `translateX(${offsetFor(d.id)}px)` }}
-                onPointerDown={(e) => onDown(e, d.id)}
-                onClick={() => selectMode && toggle(d.id)}
-              >
-                {selectMode && (
-                  <span className={`box${selected.has(d.id) ? ' on' : ''}`} aria-hidden="true" />
-                )}
-                <span className="nm">{d.emoji} {d.typeLabel}{d.label ? ` · ${d.label}` : ''}</span>
-                <span className="sb">หมดอายุ {d.expiryThai}</span>
-                <span className={`days ${d.status}`}>
-                  {d.days < 0 ? `เลย ${Math.abs(d.days)} วัน` : d.days === 0 ? 'วันนี้' : `เหลือ ${d.days} วัน`}
-                </span>
+            <div className="item" key={d.id}>
+              <div className="swipe">
+                <button className="swipe-del" onClick={() => deleteIds([d.id])} disabled={busy}>ลบ</button>
+                <div
+                  className={`doc${selectMode ? ' picking' : ''}`}
+                  style={{ transform: `translateX(${offsetFor(d.id)}px)` }}
+                  onPointerDown={(e) => onDown(e, d.id)}
+                  onClick={() => {
+                    if (swiped.current) return;
+                    if (selectMode) return toggle(d.id);
+                    // แตะก็เปิดถาดได้ ไม่ใช่ทุกคนจะเดาท่าปัดขวาออก
+                    setTrayId((c) => (c === d.id ? null : d.id));
+                    setOpenId(null);
+                  }}
+                >
+                  {selectMode && (
+                    <span className={`box${selected.has(d.id) ? ' on' : ''}`} aria-hidden="true" />
+                  )}
+                  <span className="nm">{d.emoji} {d.typeLabel}{d.label ? ` · ${d.label}` : ''}</span>
+                  <span className="sb">หมดอายุ {d.expiryThai}</span>
+                  <span className={`days ${d.status}`}>
+                    {d.days < 0 ? `เลย ${Math.abs(d.days)} วัน` : d.days === 0 ? 'วันนี้' : `เหลือ ${d.days} วัน`}
+                  </span>
+                </div>
               </div>
+
+              {trayId === d.id && !selectMode && (
+                <div className="tray">
+                  {d.actions.length === 0 ? (
+                    <p className="muted">เอกสารนี้ต่อที่หน่วยงานที่ออกให้ครับ</p>
+                  ) : (
+                    d.actions.map((a) =>
+                      a.kind === 'upsell' ? (
+                        <button
+                          key={a.label}
+                          className="act primary"
+                          disabled={leadSent.has(d.id)}
+                          onClick={() => requestLead(d)}
+                        >
+                          {leadSent.has(d.id) ? '✓ รับเรื่องแล้ว เดี๋ยวทักไปในแชทครับ' : a.label}
+                        </button>
+                      ) : (
+                        <a key={a.label} className="act" href={a.url} target="_blank" rel="noreferrer">
+                          {a.label}
+                        </a>
+                      )
+                    )
+                  )}
+                </div>
+              )}
             </div>
           ))
         )}
       </div>
 
-      {!selectMode && docs.length > 0 && <p className="note">← ปัดซ้ายที่รายการเพื่อลบ</p>}
+      {!selectMode && docs.length > 0 && (
+        <p className="note">← ปัดซ้ายเพื่อลบ · ปัดขวาเพื่อดูวิธีต่ออายุ →</p>
+      )}
 
       <div className="foot">
         <button className="btn danger" onClick={deleteEverything} disabled={busy}>
