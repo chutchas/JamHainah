@@ -172,6 +172,12 @@ async function onImage(ev: Ev, userId: string, messageId: string) {
 
 /* ---------------- ปุ่มทั้งหมด ---------------- */
 
+/** ปุ่มที่ต้องเขียนฐานข้อมูลก่อนตอบ — ต้องขึ้นจุดสามจุดให้เห็นก่อน */
+const SLOW_ACTIONS = new Set([
+  'confirm', 'setdate', 'type', 'renewed', 'renewed_pick',
+  'renew_existing', 'fix_date', 'as_new', 'archive', 'delete_confirm', 'upsell',
+]);
+
 async function onPostback(ev: Ev, userId: string) {
   await repo.upsertUser(userId);
   const params = new URLSearchParams(ev.postback?.data ?? '');
@@ -179,6 +185,13 @@ async function onPostback(ev: Ev, userId: string) {
   const docId = params.get('d');
   const typeKey = params.get('k');
   const today = todayInBangkok();
+
+  /**
+   * ปุ่มพวกนี้เขียนฐานข้อมูลแล้วคำนวณรอบเตือนใหม่ ใช้เวลาหลายวินาที
+   * ระหว่างนั้นหน้าจอนิ่งสนิท ผู้ใช้ไม่รู้ว่ากดติดหรือเปล่าแล้วจะกดซ้ำ
+   * จุดสามจุดของ LINE ฟรี ไม่นับเป็นข้อความ
+   */
+  if (SLOW_ACTIONS.has(action ?? '')) await showLoading(userId, 15);
 
   switch (action) {
     /* ---- ฉาก 02 → 03 : ยืนยันว่าถูกต้อง ---- */

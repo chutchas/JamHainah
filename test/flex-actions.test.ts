@@ -82,3 +82,39 @@ test('ปุ่มขอตำแหน่งยังต้องมีอย�
   const types = (card.quickReply?.items ?? []).map((i: any) => i.action.type);
   assert.ok(types.includes('location'), 'ต้องมีปุ่มขอตำแหน่งใน quick reply');
 });
+
+test('ปุ่ม "ใกล้ฉัน" ต้องค้นหาให้ทันที ไม่ใช่เปิดหน้าเลือกสถานที่เปล่า ๆ', () => {
+  const actions = {
+    national_id: [{ kind: 'location' as const, label: '📍 ที่ว่าการอำเภอใกล้ฉัน', searchTerm: 'ที่ว่าการอำเภอ' }],
+  };
+  const [card] = M.upcomingReminder([items[1]], '2026-11-15', actions) as any[];
+  const uris: string[] = [];
+  const walk = (n: any) => {
+    if (Array.isArray(n)) return n.forEach(walk);
+    if (!n || typeof n !== 'object') return;
+    if (n.type === 'button' && n.action?.type === 'uri') uris.push(n.action.uri);
+    for (const [k, v] of Object.entries(n)) if (k !== 'quickReply') walk(v);
+  };
+  walk(card);
+  assert.ok(
+    uris.some((u) => u.startsWith('https://www.google.com/maps/search/') && u.includes(encodeURIComponent('ที่ว่าการอำเภอ'))),
+    'ต้องมีปุ่มเปิด Google Maps พร้อมคำค้นในการ์ด'
+  );
+});
+
+test('มีการ์ดเตือนด่วนต่อท้าย ต้องไม่ชวนคุยเรื่องเอกสารอื่น', () => {
+  // ชิปของข้อความสุดท้ายเท่านั้นที่ LINE แสดง — ถ้าแทรกข้อความชวนเพิ่ม ปุ่มของการ์ดเตือนจะหาย
+  const withUrgent = M.savedAndSuggestMore({
+    typeKey: 'national_id',
+    reminderDates: [{ send_on: '2026-11-15', offset_days: -5 }],
+    docCount: 1, today: '2026-11-15', expiry: '2026-11-20', ownedTypeKeys: ['national_id'],
+  });
+  assert.equal(withUrgent.length, 1, 'ต้องเหลือแค่ข้อความ "บันทึกแล้ว" ข้อความเดียว');
+
+  const normal = M.savedAndSuggestMore({
+    typeKey: 'national_id',
+    reminderDates: [{ send_on: '2026-12-01', offset_days: -30 }],
+    docCount: 1, today: '2026-11-15', expiry: '2026-12-31', ownedTypeKeys: ['national_id'],
+  });
+  assert.ok(normal.length > 1, 'เคสปกติยังต้องชวนเพิ่มเหมือนเดิม');
+});

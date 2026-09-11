@@ -12,7 +12,7 @@
 import { ASK_TYPE_CHOICES, DocType, SUGGEST_BY_GROUP, displayName, docType } from '@/lib/domain/docTypes';
 import { ISODate, daysBetween, formatThai, humanRemaining } from '@/lib/domain/thaiDate';
 import { env } from '@/lib/env';
-import type { RenewAction } from '@/lib/domain/renewActions';
+import { RenewAction, mapsSearchUrl } from '@/lib/domain/renewActions';
 
 export type LineMessage = Record<string, unknown>;
 
@@ -372,6 +372,16 @@ export function savedAndSuggestMore(args: {
 
   const out: LineMessage[] = [text(head)];
 
+  /**
+   * มีการ์ดเตือนด่วนต่อท้ายข้อความนี้ — หยุดแค่นี้
+   *
+   * สองเหตุผล
+   *   1. ผู้ใช้กำลังโฟกัสของที่ใกล้หมดอายุ ชวนคุยเรื่องเอกสารอื่นตอนนี้คือขัดจังหวะ
+   *   2. LINE แสดง quickReply ของ "ข้อความสุดท้าย" เท่านั้น
+   *      ถ้าเอาชิปชวนเพิ่มมาแทรก ปุ่มของการ์ดเตือนจะหายไปทั้งหมด
+   */
+  if (sentNow.length > 0) return out;
+
   if (args.docCount >= 3) {
     // ฉาก 04 — สัญญาว่าจะเงียบ
     const next = future[0];
@@ -467,6 +477,7 @@ export function upcomingReminder(
    */
   const footer: LineMessage[] = [];
   const quick: Array<{ label: string; data?: string; liff?: boolean; locate?: boolean }> = [];
+  let hasNearby = false;
 
   for (const a of (actionsByType[soonest.typeKey] ?? []).slice(0, 4)) {
     if (a.kind === 'upsell') {
@@ -475,10 +486,21 @@ export function upcomingReminder(
     } else if (a.kind === 'link' && a.url) {
       footer.push({ type: 'button', style: 'link', height: 'sm',
         action: { type: 'uri', label: a.label, uri: a.url } });
-    } else if (a.kind === 'location') {
-      quick.push({ label: a.label, locate: true });
+    } else if (a.kind === 'location' && a.searchTerm) {
+      // ปุ่มเขียนว่า "ใกล้ฉัน" ต้องค้นหาให้เลย
+      // location action เปิดได้แค่หน้าเลือกสถานที่ของ LINE ซึ่งไม่รับคำค้นของเรา
+      // ผู้ใช้เลยเจอร้านอาหารแถวบ้านแทนที่จะเจอที่ว่าการอำเภอ
+      footer.push({ type: 'button', style: 'link', height: 'sm',
+        action: { type: 'uri', label: a.label, uri: mapsSearchUrl(a.searchTerm) } });
+      hasNearby = true;
     }
   }
+  /**
+   * แชร์ตำแหน่งเป็นทางเลือก ไม่ใช่ทางบังคับ
+   * ปุ่มข้างบนใช้ได้เลยโดยไม่ต้องขออะไร ส่วนอันนี้ไว้ให้คนที่อยากได้ผลแม่นกว่า
+   * (และเป็นทางเดียวที่เราจะรู้ว่าผู้ใช้อยู่โซนไหน — ไว้ไปหาร้านคู่ค้าแถวนั้น)
+   */
+  if (hasNearby) quick.push({ label: '📌 บอกตำแหน่งให้แม่นขึ้น', locate: true });
   // การ์ดรวมหลายใบ: ห้ามเดาว่าเขาต่อครบทุกใบ ให้เลือกทีละใบ
   footer.push(
     items.length > 1

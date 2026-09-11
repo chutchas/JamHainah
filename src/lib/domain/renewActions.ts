@@ -100,11 +100,17 @@ export async function loadRenewActions(): Promise<Record<string, RenewAction[]>>
 }
 
 /**
- * ลิงก์ค้นหาบน Google Maps รอบพิกัดที่ผู้ใช้แชร์มา
+ * ลิงก์ค้นหาบน Google Maps
  *
  * ใช้ URL ล้วน ไม่ต้องใช้ Places API — ไม่มีค่าใช้จ่าย ไม่มี key ให้ดูแล
  * และผลลัพธ์อัปเดตเองตลอด ดีกว่าฐานข้อมูลร้านที่เราต้องมาไล่ดูแลเอง
+ *
+ * ไม่ส่งพิกัดมาก็ใช้ได้ — Google Maps ใช้ตำแหน่งของเครื่องเอง
+ * ปุ่มที่เขียนว่า "ใกล้ฉัน" จึงต้องค้นหาให้ทันทีที่กด
+ * ไม่ใช่เปิดหน้าเลือกสถานที่เปล่า ๆ แล้วรอให้ผู้ใช้พิมพ์เอง
  */
-export function mapsSearchUrl(searchTerm: string, lat: number, lng: number): string {
-  return `https://www.google.com/maps/search/${encodeURIComponent(searchTerm)}/@${lat},${lng},14z`;
+export function mapsSearchUrl(searchTerm: string, lat?: number, lng?: number): string {
+  const q = `https://www.google.com/maps/search/${encodeURIComponent(searchTerm)}`;
+  // มีพิกัดก็ปักหมุดให้ตรงขึ้น (ใช้ตอนผู้ใช้แชร์ตำแหน่งมาเอง)
+  return lat != null && lng != null ? `${q}/@${lat},${lng},14z` : q;
 }
