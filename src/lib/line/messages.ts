@@ -16,7 +16,6 @@ import { RenewAction, mapsSearchUrl, renewWindow } from '@/lib/domain/renewActio
 
 export type LineMessage = Record<string, unknown>;
 
-const GREEN = '#06C755';
 const WARN = '#B8460E';
 const MUTED = '#8A9A93';
 
@@ -31,32 +30,20 @@ const MUTED = '#8A9A93';
 const LIST_NAME = 'เอกสารของฉัน';
 
 /**
- * ชุดไอคอน — ความหมายเดียว ไอคอนเดียว ทั้งระบบ
+ * ชุดไอคอน — เราวาดเอง ไม่ใช้ emoji
  *
- * สองกฎที่ทำให้มันดูสะอาดบนทุกเครื่อง
+ * emoji ถูกวาดโดยระบบปฏิบัติการ ไม่ใช่โดยเรา ไอคอนเดียวกันจึงหน้าตาคนละอย่าง
+ * ระหว่าง iPhone กับ Android และบางตัวกลายเป็นกล่องสีเทาบนเครื่องเก่า
+ * ไฟล์จริงอยู่ที่ public/icons (สร้างจาก tools/icons.py)
  *
- * 1. action ประเภท camera / datetimepicker / location
- *    LINE วาดไอคอนของตัวเองให้อยู่แล้ว ใส่ emoji ซ้ำจะได้ไอคอนสองอันติดกัน
- *    (ปุ่ม "เพิ่มใบอื่น" เคยเป็นแบบนั้น) ปุ่มพวกนั้นจึงเป็นข้อความล้วน
- *
- * 2. เลือกเฉพาะ emoji ที่เป็นรูปทรงเรียบ สีเดียว
- *    emoji ถูกวาดโดยระบบปฏิบัติการ ไม่ใช่โดยเรา
- *    รูปละเอียดอย่าง 📸 หรือ 💻 หน้าตาต่างกันมากระหว่าง iPhone กับ Android
- *    ส่วนรูปทรงง่าย ๆ อย่าง ➕ 📍 ✏️ เหมือนกันแทบทุกเครื่อง
+ * ใช้ได้เฉพาะใน quick reply — Flex button ใส่รูปไม่ได้
+ * ซึ่งเป็นหนึ่งในเหตุผลที่ปุ่มทั้งหมดย้ายมาอยู่ที่ quick reply
  */
-const I = {
-  list: '📄',
-  ok: '✅',
-  edit: '✏️',
-  renew: '🔄',
-  add: '➕',
-  map: '📍',
-  web: '🌐',
-  chat: '💬',
-  bell: '🔔',
-  warn: '⚠️',
-  date: '📅',
-} as const;
+const ICONS = [
+  'doc', 'camera', 'calendar', 'check', 'edit', 'renew',
+  'plus', 'pin', 'globe', 'chat', 'spark', 'bell', 'box', 'close',
+] as const;
+export type IconName = (typeof ICONS)[number];
 
 /* ---------- helpers ---------- */
 
@@ -68,26 +55,62 @@ function text(t: string, quickReply?: LineMessage): LineMessage {
   return quickReply ? { type: 'text', text: t, quickReply } : { type: 'text', text: t };
 }
 
-function chips(items: Array<{ label: string; data?: string; date?: boolean; camera?: boolean; liff?: boolean; locate?: boolean; initial?: string }>): LineMessage {
+export interface Chip {
+  label: string;
+  /** postback */
+  data?: string;
+  /** เปิดลิงก์ */
+  uri?: string;
+  /** เปิดปฏิทิน */
+  date?: boolean;
+  /** วันที่ตั้งต้นในปฏิทิน */
+  initial?: string;
+  /** เปิดกล้อง */
+  camera?: boolean;
+  /** เปิดหน้าเอกสารของฉัน */
+  liff?: boolean;
+  /** ขอตำแหน่ง */
+  locate?: boolean;
+  icon?: IconName;
+}
+
+/**
+ * LINE ตัดข้อความที่ยาวเกิน 20 ตัวอักษรใน quick reply ทิ้งไม่ได้ — มันตอบ 400 ทั้งก้อน
+ * แล้วผู้ใช้จะเจอความเงียบ เพราะ reply token ถูกใช้ไปแล้ว
+ * ป้ายที่สั้นลงหนึ่งคำ ดีกว่าข้อความที่ส่งไม่ออก
+ */
+function clip(label: string): string {
+  return label.length <= 20 ? label : label.slice(0, 19) + '…';
+}
+
+/** ป้ายในฐานข้อมูลยังมี emoji นำหน้าอยู่ — ตอนนี้มีไอคอนจริงแล้ว เอาออก */
+function bare(label: string): string {
+  return label.replace(/^[^\p{L}\p{N}]+/u, '').trim();
+}
+
+function chips(items: Chip[]): LineMessage {
   return {
-    items: items.slice(0, 13).map((c) => ({
-      type: 'action',
-      action: c.locate
-        // location action ใช้ได้เฉพาะที่นี่ ห้ามย้ายไป Flex button
-        ? { type: 'location', label: c.label }
+    items: items.slice(0, 13).map((c) => {
+      const label = clip(bare(c.label));
+      const action = c.locate
+        ? { type: 'location', label }
         : c.liff
         // uri action เปิด LIFF ทันทีที่กด — ไม่ต้องวิ่งเข้าเซิร์ฟเวอร์
         // ไม่เสียค่าข้อความ และผู้ใช้กดครั้งเดียวจบ
-        ? { type: 'uri', label: c.label, uri: env.liffUrl }
+        ? { type: 'uri', label, uri: env.liffUrl }
+        : c.uri
+        ? { type: 'uri', label, uri: c.uri }
         : c.camera
-        ? { type: 'camera', label: c.label }
+        ? { type: 'camera', label }
         : c.date
-        ? {
-            type: 'datetimepicker', label: c.label, data: c.data ?? pb('date'),
-            mode: 'date', initial: c.initial,
-          }
-        : { type: 'postback', label: c.label, data: c.data!, displayText: c.label },
-    })),
+        ? { type: 'datetimepicker', label, data: c.data ?? pb('date'), mode: 'date', initial: c.initial }
+        : { type: 'postback', label, data: c.data!, displayText: label };
+
+      const item: Record<string, unknown> = { type: 'action', action };
+      // ไม่มี baseUrl ก็แค่ไม่มีไอคอน ปุ่มยังกดได้ — ห้ามพังเพราะเรื่องรูป
+      if (c.icon && env.baseUrl) item.imageUrl = `${env.baseUrl}/icons/${c.icon}.png`;
+      return item;
+    }),
   };
 }
 
@@ -126,13 +149,6 @@ function bubble(body: LineMessage[], footer?: LineMessage[], altText = 'จำ�
   return { type: 'flex', altText, contents };
 }
 
-function button(label: string, data: string, style: 'primary' | 'secondary' | 'link' = 'link'): LineMessage {
-  return {
-    type: 'button', style, height: 'sm',
-    color: style === 'primary' ? GREEN : undefined,
-    action: { type: 'postback', label, data, displayText: label },
-  };
-}
 
 /* ============================================================
  * ฉาก 01 — กด Add เพื่อน
@@ -148,8 +164,8 @@ export function greeting(): LineMessage[] {
         'ถ่ายรูปเอกสารส่งมาได้เลย\n' +
         'ไม่ต้องสมัคร ไม่ต้องกรอกอะไรครับ',
       chips([
-        { label: 'ส่งรูปเอกสาร', camera: true },
-        { label: 'พิมพ์วันที่เอง', data: pb('manual') },
+        { label: 'ส่งรูปเอกสาร', camera: true, icon: 'camera' },
+        { label: 'พิมพ์วันที่เอง', data: pb('manual'), icon: 'calendar' },
       ])
     ),
   ];
@@ -174,32 +190,22 @@ export function confirmExtracted(args: {
   rows.push(row('หมดอายุ', formatThai(args.expiry)));
   rows.push(row('เหลืออีก', humanRemaining(args.today, args.expiry), true));
 
-  return [
-    text('อ่านได้แบบนี้ครับ ถูกต้องไหม'),
-    bubble(
-      [
-        { type: 'text', text: `${t.emoji} ${t.label}`, weight: 'bold', size: 'lg', wrap: true },
-        { type: 'separator', margin: 'md' },
-        { type: 'box', layout: 'vertical', spacing: 'sm', margin: 'md', contents: rows },
-      ],
-      [
-        button('✅ ถูกต้อง', pb('confirm', { d: args.documentId }), 'primary'),
-        // datetimepicker ตรงนี้เลย — เดิมเป็น postback แล้วค่อยส่งปุ่มปฏิทินตามมา
-        // ทำให้ผู้ใช้ต้องกดสองรอบเพื่อทำเรื่องเดียว
-        {
-          type: 'button', style: 'link', height: 'sm',
-          action: {
-            type: 'datetimepicker',
-            label: `${I.edit} แก้ไขวันที่`,
-            data: pb('setdate', { d: args.documentId }),
-            mode: 'date',
-            initial: args.expiry,
-          },
-        },
-      ],
-      `${t.label} หมดอายุ ${formatThai(args.expiry)}`
-    ),
-  ];
+  const card = bubble(
+    [
+      { type: 'text', text: `${t.emoji} ${t.label}`, weight: 'bold', size: 'lg', wrap: true },
+      { type: 'separator', margin: 'md' },
+      { type: 'box', layout: 'vertical', spacing: 'sm', margin: 'md', contents: rows },
+    ],
+    undefined,
+    `${t.label} หมดอายุ ${formatThai(args.expiry)}`
+  );
+  card.quickReply = chips([
+    { label: 'ถูกต้อง', data: pb('confirm', { d: args.documentId }), icon: 'check' },
+    // ปฏิทินเปิดตรงนี้เลย — เดิมเป็น postback แล้วค่อยส่งปุ่มปฏิทินตามมา
+    // ทำให้ผู้ใช้ต้องกดสองรอบเพื่อทำเรื่องเดียว
+    { label: 'แก้ไขวันที่', data: pb('setdate', { d: args.documentId }), date: true, initial: args.expiry, icon: 'calendar' },
+  ]);
+  return [text('อ่านได้แบบนี้ครับ ถูกต้องไหม'), card];
 }
 
 /**
@@ -211,8 +217,8 @@ export function alreadyConfirmed(typeKey: string, label: string | null | undefin
     text(
       `${displayName(typeKey, label)} ยืนยันไปแล้วครับ ✅\nหมดอายุ ${formatThai(expiry)}`,
       chips([
-        { label: `${I.list} ${LIST_NAME}`, liff: true },
-        { label: 'เพิ่มเอกสารอื่น', camera: true },
+        { label: LIST_NAME, liff: true, icon: 'doc' },
+        { label: 'เพิ่มเอกสารอื่น', camera: true, icon: 'camera' },
       ])
     ),
   ];
@@ -224,8 +230,8 @@ export function alreadyHave(typeKey: string, label: string | null | undefined, e
     text(
       `${displayName(typeKey, label)} มีอยู่ในรายการแล้วครับ\nหมดอายุ ${formatThai(expiry)}\n\nผมจะไม่บันทึกซ้ำนะครับ`,
       chips([
-        { label: `${I.list} ${LIST_NAME}`, liff: true },
-        { label: 'เพิ่มเอกสารอื่น', camera: true },
+        { label: LIST_NAME, liff: true, icon: 'doc' },
+        { label: 'เพิ่มเอกสารอื่น', camera: true, icon: 'camera' },
       ])
     ),
   ];
@@ -300,17 +306,17 @@ export function askRenewalOrNew(args: {
   if (args.reason === 'unclear_gap') {
     return [
       text(head + 'อันไหนถูกครับ', chips([
-        { label: `${I.renew} ต่ออายุแล้ว ใช้วันใหม่`, data: pb('renew_existing', { d: args.existingId }) },
-        { label: `${I.edit} ครั้งก่อนอ่านผิด แก้เป็นวันใหม่`, data: pb('fix_date', { d: args.existingId }) },
-        { label: `${I.add} คนละใบ`, data: pb('as_new') },
+        { label: 'ต่ออายุแล้ว', data: pb('renew_existing', { d: args.existingId }), icon: 'renew' },
+        { label: 'ครั้งก่อนอ่านผิด', data: pb('fix_date', { d: args.existingId }), icon: 'edit' },
+        { label: 'คนละใบ', data: pb('as_new'), icon: 'plus' },
       ])),
     ];
   }
 
   return [
     text(head + 'ใบนี้คืออันไหนครับ', chips([
-      { label: `${I.renew} ต่ออายุใบเดิม`, data: pb('renew_existing', { d: args.existingId }) },
-      { label: `${I.add} คนละใบ/คนละคัน`, data: pb('as_new') },
+      { label: 'ต่ออายุใบเดิม', data: pb('renew_existing', { d: args.existingId }), icon: 'renew' },
+      { label: 'คนละใบ/คนละคัน', data: pb('as_new'), icon: 'plus' },
     ])),
   ];
 }
@@ -335,8 +341,8 @@ export function askDate(args: { typeKey?: string; documentId?: string; reason?: 
 
   return [
     text(body, chips([
-      { label: 'เลือกวันที่', data, date: true },
-      { label: 'ถ่ายใหม่', camera: true },
+      { label: 'เลือกวันที่', data, date: true, icon: 'calendar' },
+      { label: 'ถ่ายใหม่', camera: true, icon: 'camera' },
     ])),
   ];
 }
@@ -385,8 +391,8 @@ function schedule(rows: Array<{ send_on: ISODate; offset_days: number }>, today:
 /** ไม่มีปุ่ม "ถูกต้อง" เพราะบันทึกไปแล้ว — ปุ่มที่ยังมีความหมายคือปุ่มแก้ */
 function confirmChips(documentId: string, current: ISODate): LineMessage {
   return chips([
-    { label: 'ไม่ใช่วันนี้ แก้ไข', data: pb('setdate', { d: documentId }), date: true, initial: current },
-    { label: `${I.list} ${LIST_NAME}`, liff: true },
+    { label: 'ไม่ใช่วันนี้ แก้ไข', data: pb('setdate', { d: documentId }), date: true, initial: current, icon: 'calendar' },
+    { label: LIST_NAME, liff: true, icon: 'doc' },
   ]);
 }
 
@@ -401,7 +407,7 @@ function reminderLines(rows: Array<{ send_on: ISODate; offset_days: number }>, t
     .filter((r) => r.offset_days <= 0 && r.send_on > today)
     .map((r) => {
       const when = r.offset_days <= -60 ? 'วันแรกที่ต่อได้' : `เหลือ ${Math.abs(r.offset_days)} วัน`;
-      return `${I.date} ${formatThai(r.send_on)} — ${when}`;
+      return `📅 ${formatThai(r.send_on)} — ${when}`;
     });
 }
 
@@ -463,7 +469,7 @@ export function savedAndSuggestMore(args: {
         `เยี่ยมครับ ตอนนี้ผมดูให้ ${args.docCount} รายการ 🎉\n\n` +
           (next ? `ครั้งต่อไปที่คุณจะได้ยินจากผม\nคือ ${formatThai(next.send_on)}\n\n` : '') +
           'ระหว่างนี้ผมจะเงียบครับ 🤫',
-        chips([{ label: `${I.list} ${LIST_NAME}`, liff: true }])
+        chips([{ label: LIST_NAME, liff: true, icon: 'doc' }])
       )
     );
   } else {
@@ -480,8 +486,8 @@ export function savedAndSuggestMore(args: {
       text(
         group.prompt,
         chips([
-          ...suggest.map((t) => ({ label: `${t.emoji} ${t.label}`, data: pb('type', { k: t.key }) })),
-          { label: 'ยังก่อน', data: pb('later') },
+          ...suggest.map((t): Chip => ({ label: `${t.emoji} ${t.label}`, data: pb('type', { k: t.key }) })),
+          { label: 'ยังก่อน', data: pb('later'), icon: 'bell' },
         ])
       )
     );
@@ -517,7 +523,7 @@ export function upcomingReminder(
 
   const header = early
     ? `${t.emoji} ${t.label}${soonest.label ? ` ${soonest.label}` : ''}\nต่อได้ตั้งแต่วันนี้แล้วครับ`
-    : `${urgent ? I.warn : I.bell} ${items.length > 1 ? 'มี ' + items.length + ' รายการใกล้ครบกำหนด' : displayName(soonest.typeKey, soonest.label)}`;
+    : `${urgent ? '⚠️' : '🔔'} ${items.length > 1 ? 'มี ' + items.length + ' รายการใกล้ครบกำหนด' : displayName(soonest.typeKey, soonest.label)}`;
 
   const rows = items.map((it) => ({
     type: 'box', layout: 'vertical', spacing: 'xs',
@@ -540,48 +546,43 @@ export function upcomingReminder(
    * ไม่งั้นการเตือนกลายเป็นแค่การรบกวน
    */
   /**
-   * ⚠️ LINE ให้ location / camera / cameraRoll ใช้ได้เฉพาะใน quick reply
-   *    ใส่ลง Flex button เมื่อไหร่ ข้อความจะไม่ผ่าน validation ทั้งก้อน
-   *    ตอบกลับมาแค่ 400 "message is invalid" โดยไม่บอกว่าฟิลด์ไหน
-   *    แล้วผู้ใช้จะเจอความเงียบสนิท เพราะ reply token ถูกใช้ไปแล้ว
+   * ปุ่มทั้งหมดอยู่ที่ quick reply ไม่ใช่ในการ์ด
    *
-   * ปุ่มจึงต้องแยกสองที่: กดในการ์ดได้เฉพาะ postback/uri
-   * ส่วนขอตำแหน่งไปอยู่เป็นชิปด้านล่าง
+   * สามเหตุผล
+   *   1. quick reply ใส่ไอคอนรูปของเราเองได้ ปุ่มใน Flex ใส่ไม่ได้
+   *      ไอคอนทั้งระบบจึงเป็นชุดเดียวกันได้ก็ต่อเมื่อปุ่มอยู่ที่เดียวกัน
+   *   2. quick reply หายไปเองเมื่อมีข้อความใหม่
+   *      ส่วนการ์ดเก่าค้างอยู่ในแชทตลอดกาล ผู้ใช้เลื่อนขึ้นไปกดปุ่มของเมื่อเดือนที่แล้วได้
+   *      แล้วระบบก็ต้องมาคอยกันทีหลังว่ากดซ้ำหรือเปล่า
+   *   3. location / camera ใช้ได้เฉพาะใน quick reply อยู่แล้ว
+   *      ปุ่มอยู่สองที่แปลว่าต้องจำกฎสองชุด
+   *
+   * ที่แลกไปคือปุ่มไม่ติดอยู่กับการ์ด — ถ้าผู้ใช้พิมพ์อะไรต่อ ชิปจะหาย
+   * รับได้ เพราะหน้า "เอกสารของฉัน" มีปุ่มชุดเดียวกันครบทุกใบแบบไม่หายไปไหน
+   * แชทเป็นที่ชั่วคราว หน้าเว็บเป็นที่ถาวร
    */
-  const footer: LineMessage[] = [];
-  const quick: Array<{ label: string; data?: string; liff?: boolean; locate?: boolean }> = [];
+  const quick: Chip[] = [];
 
   // ปุ่มขึ้นเฉพาะตอนที่ทำได้จริง — ปุ่มที่กดแล้วไปเจอ "ยังต่อไม่ได้ครับ" แย่กว่าไม่มีปุ่ม
   const win = renewWindow(soonest.typeKey, soonest.expiry, today);
   for (const a of (win.open ? actionsByType[soonest.typeKey] ?? [] : []).slice(0, 4)) {
     if (a.kind === 'upsell') {
       const price = docType(soonest.typeKey).upsell?.price;
-      footer.push(button(`${a.label}${price ? ` · ${price}฿` : ''}`, pb('upsell', { d: soonest.documentId }), 'primary'));
+      quick.push({ label: `${a.label}${price ? ` ${price}฿` : ''}`, data: pb('upsell', { d: soonest.documentId }), icon: 'spark' });
     } else if (a.kind === 'link' && a.url) {
-      footer.push({ type: 'button', style: 'link', height: 'sm',
-        action: { type: 'uri', label: a.label, uri: a.url } });
+      quick.push({ label: a.label, uri: a.url, icon: 'globe' });
     } else if (a.kind === 'location' && a.searchTerm) {
       // ปุ่มเขียนว่า "ใกล้ฉัน" ต้องค้นหาให้เลย
       // location action เปิดได้แค่หน้าเลือกสถานที่ของ LINE ซึ่งไม่รับคำค้นของเรา
       // ผู้ใช้เลยเจอร้านอาหารแถวบ้านแทนที่จะเจอที่ว่าการอำเภอ
-      footer.push({ type: 'button', style: 'link', height: 'sm',
-        action: { type: 'uri', label: a.label, uri: mapsSearchUrl(a.searchTerm) } });
+      quick.push({ label: a.label, uri: mapsSearchUrl(a.searchTerm), icon: 'pin' });
     }
   }
-  /**
-   * ไม่มีชิป "แชร์ตำแหน่ง" ที่นี่แล้ว
-   *
-   * มันทำงานซ้ำกับปุ่มข้างบน — แชร์พิกัดมาก็ได้ลิงก์ Google Maps กลับไปอันเดิม
-   * ผู้ใช้จึงต้องกดสามที เพื่อให้ได้สิ่งที่กดทีเดียวก็ได้อยู่แล้ว
-   *
-   * ส่วนพิกัด (ที่เราอยากได้ไว้หาร้านคู่ค้า) ไปเก็บที่หน้า LIFF แทน
-   * ที่นั่นเบราว์เซอร์จำคำอนุญาตให้ ถามครั้งเดียวใช้ได้ตลอด
-   */
   // การ์ดรวมหลายใบ: ห้ามเดาว่าเขาต่อครบทุกใบ ให้เลือกทีละใบ
-  footer.push(
+  quick.push(
     items.length > 1
-      ? button(`${I.ok} ต่อเองแล้ว`, pb('renewed_pick'))
-      : button(`${I.ok} ต่อเองแล้ว`, pb('renewed', { d: soonest.documentId }))
+      ? { label: 'ต่อเองแล้ว', data: pb('renewed_pick'), icon: 'check' }
+      : { label: 'ต่อเองแล้ว', data: pb('renewed', { d: soonest.documentId }), icon: 'check' }
   );
 
   const card = bubble(
@@ -595,11 +596,11 @@ export function upcomingReminder(
         { type: 'separator', margin: 'md' },
         { type: 'box', layout: 'vertical', spacing: 'md', margin: 'md', contents: rows },
       ],
-      footer,
+      undefined,
       `เตือน: ${displayName(soonest.typeKey, soonest.label)} ${humanRemaining(today, soonest.expiry)}`
   );
 
-  quick.push({ label: `${I.list} ${LIST_NAME}`, liff: true });
+  quick.push({ label: LIST_NAME, liff: true, icon: 'doc' });
   card.quickReply = chips(quick);
   return [card];
 }
@@ -619,9 +620,9 @@ export function dueReminder(items: ReminderItem[]): LineMessage[] {
       text(
         `${displayName(first.typeKey, first.label)} ครบกำหนดเมื่อวานครับ\nต่อเรียบร้อยหรือยังครับ`,
         chips([
-          { label: `${I.ok} ต่อแล้ว`, data: pb('renewed', { d: first.documentId }) },
-          { label: 'ยังเลย ช่วยที', data: pb('upsell', { d: first.documentId }) },
-          { label: 'ไม่ได้ใช้แล้ว', data: pb('archive', { d: first.documentId }) },
+          { label: 'ต่อแล้ว', data: pb('renewed', { d: first.documentId }), icon: 'check' },
+          { label: 'ยังเลย ช่วยที', data: pb('upsell', { d: first.documentId }), icon: 'spark' },
+          { label: 'ไม่ได้ใช้แล้ว', data: pb('archive', { d: first.documentId }), icon: 'box' },
         ])
       ),
     ];
@@ -632,25 +633,28 @@ export function dueReminder(items: ReminderItem[]): LineMessage[] {
     contents: [
       { type: 'text', text: displayName(it.typeKey, it.label), size: 'sm', weight: 'bold', wrap: true },
       { type: 'text', text: `ครบกำหนด ${formatThai(it.expiry)}`, size: 'xs', color: MUTED },
-      button('✅ ต่อแล้ว', pb('renewed', { d: it.documentId })),
     ],
   })) as LineMessage[];
 
-  return [
-    bubble(
-      [
-        { type: 'text', text: `มี ${items.length} รายการครบกำหนดแล้วครับ`, weight: 'bold', size: 'md', wrap: true },
-        { type: 'text', text: 'ต่อเรียบร้อยหรือยังครับ', size: 'sm', color: MUTED },
-        { type: 'separator', margin: 'md' },
-        ...rows,
-      ],
-      items.length > 4
-        ? [{ type: 'button', style: 'link', height: 'sm',
-             action: { type: 'uri', label: `${I.list} ${LIST_NAME}`, uri: env.liffUrl } }]
-        : undefined,
-      'มีเอกสารครบกำหนดแล้ว'
-    ),
-  ];
+  const card = bubble(
+    [
+      { type: 'text', text: `มี ${items.length} รายการครบกำหนดแล้วครับ`, weight: 'bold', size: 'md', wrap: true },
+      { type: 'text', text: 'ต่อใบไหนไปแล้ว กดใบนั้นได้เลยครับ', size: 'sm', color: MUTED, wrap: true },
+      { type: 'separator', margin: 'md' },
+      ...rows,
+    ],
+    undefined,
+    'มีเอกสารครบกำหนดแล้ว'
+  );
+  card.quickReply = chips([
+    ...items.slice(0, 4).map((it): Chip => ({
+      label: displayName(it.typeKey, it.label),
+      data: pb('renewed', { d: it.documentId }),
+      icon: 'check',
+    })),
+    { label: LIST_NAME, liff: true, icon: 'doc' },
+  ]);
+  return [card];
 }
 
 /**
@@ -696,22 +700,27 @@ export function pickRenewed(items: ReminderItem[], today: ISODate): LineMessage[
     contents: [
       { type: 'text', text: displayName(it.typeKey, it.label), size: 'sm', weight: 'bold', wrap: true },
       { type: 'text', text: `หมดอายุ ${formatThai(it.expiry)} · ${humanRemaining(today, it.expiry)}`, size: 'xs', color: MUTED, wrap: true },
-      button('✅ ใบนี้ต่อแล้ว', pb('renewed', { d: it.documentId })),
     ],
   })) as LineMessage[];
 
-  return [
-    bubble(
-      [
-        { type: 'text', text: 'ต่ออายุใบไหนไปแล้วบ้างครับ', weight: 'bold', size: 'md', wrap: true },
-        { type: 'text', text: 'กดทีละใบได้เลย ไม่ต้องต่อครบทุกใบก็ได้', size: 'xs', color: MUTED, wrap: true },
-        { type: 'separator', margin: 'md' },
-        ...rows,
-      ],
-      undefined,
-      'ต่ออายุใบไหนไปแล้วบ้าง'
-    ),
-  ];
+  const card = bubble(
+    [
+      { type: 'text', text: 'ต่ออายุใบไหนไปแล้วบ้างครับ', weight: 'bold', size: 'md', wrap: true },
+      { type: 'text', text: 'กดทีละใบได้เลย ไม่ต้องต่อครบทุกใบก็ได้', size: 'xs', color: MUTED, wrap: true },
+      { type: 'separator', margin: 'md' },
+      ...rows,
+    ],
+    undefined,
+    'ต่ออายุใบไหนไปแล้วบ้าง'
+  );
+  card.quickReply = chips(
+    items.slice(0, 4).map((it): Chip => ({
+      label: displayName(it.typeKey, it.label),
+      data: pb('renewed', { d: it.documentId }),
+      icon: 'check',
+    }))
+  );
+  return [card];
 }
 
 /* ============================================================
@@ -730,8 +739,8 @@ export function upsellIntro(typeKey: string): LineMessage[] {
         (price ? `ค่าบริการ ${price} บาท\n(ค่าภาษีจริงแจ้งอีกทีหลังคำนวณ)\n` : '') +
         'เสร็จภายใน 3 วันทำการ',
       chips([
-        { label: 'ส่งข้อมูล', data: pb('upsell_start', { k: typeKey }) },
-        { label: `${I.chat} ขอถามก่อน`, data: pb('human') },
+        { label: 'ส่งข้อมูล', data: pb('upsell_start', { k: typeKey }), icon: 'spark' },
+        { label: 'ขอถามก่อน', data: pb('human'), icon: 'chat' },
       ])
     ),
   ];
@@ -748,13 +757,15 @@ export function nearbyPlaces(places: Array<{ label: string; url: string }>): Lin
   if (places.length === 0) {
     return [
       text('ขอบคุณครับ 🙏 ผมจำพื้นที่นี้ไว้ใช้แนะนำคราวหน้านะครับ',
-        chips([{ label: `${I.list} ${LIST_NAME}`, liff: true }])),
+        chips([{ label: LIST_NAME, liff: true, icon: 'doc' }])),
     ];
   }
   return [
     text('แถวนี้มีที่ไหนบ้าง กดดูได้เลยครับ 📍', {
       items: places.slice(0, 4).map((p) => ({
-        type: 'action', action: { type: 'uri', label: p.label, uri: p.url },
+        type: 'action',
+        action: { type: 'uri', label: clip(bare(p.label)), uri: p.url },
+        ...(env.baseUrl ? { imageUrl: `${env.baseUrl}/icons/pin.png` } : {}),
       })),
     }),
   ];
@@ -765,8 +776,8 @@ export function notADocument(): LineMessage[] {
     text(
       'อันนี้ผมอ่านไม่ออกครับ 😅\nส่งรูปเอกสารที่มีวันหมดอายุมาได้เลย',
       chips([
-        { label: 'ถ่ายใหม่', camera: true },
-        { label: 'พิมพ์วันที่เอง', data: pb('manual') },
+        { label: 'ถ่ายใหม่', camera: true, icon: 'camera' },
+        { label: 'พิมพ์วันที่เอง', data: pb('manual'), icon: 'calendar' },
       ])
     ),
   ];
@@ -777,8 +788,8 @@ export function confirmDelete(docCount: number): LineMessage[] {
     text(
       `ได้ครับ ผมจะลบเอกสารทั้ง ${docCount} รายการ\nและรูปที่เคยส่งมาทั้งหมดถาวร\n\nยืนยันไหมครับ`,
       chips([
-        { label: 'ยืนยันลบ', data: pb('delete_confirm') },
-        { label: 'ยกเลิก', data: pb('cancel') },
+        { label: 'ยืนยันลบ', data: pb('delete_confirm'), icon: 'box' },
+        { label: 'ยกเลิก', data: pb('cancel'), icon: 'close' },
       ])
     ),
   ];
@@ -803,7 +814,7 @@ export function listLink(liffUrl: string): LineMessage[] {
       type: 'text',
       text: `เปิดดู${LIST_NAME}ได้ที่นี่ครับ`,
       quickReply: {
-        items: [{ type: 'action', action: { type: 'uri', label: `${I.list} ${LIST_NAME}`, uri: liffUrl } }],
+        items: [{ type: 'action', action: { type: 'uri', label: LIST_NAME, uri: liffUrl } }],
       },
     },
   ];
@@ -814,9 +825,9 @@ export function fallback(): LineMessage[] {
     text(
       'ผมช่วยจำวันหมดอายุเอกสารให้ครับ\nส่งรูปเอกสารมาได้เลย',
       chips([
-        { label: 'ส่งรูปเอกสาร', camera: true },
-        { label: `${I.list} ${LIST_NAME}`, liff: true },
-        { label: `${I.chat} คุยกับคน`, data: pb('human') },
+        { label: 'ส่งรูปเอกสาร', camera: true, icon: 'camera' },
+        { label: LIST_NAME, liff: true, icon: 'doc' },
+        { label: 'คุยกับคน', data: pb('human'), icon: 'chat' },
       ])
     ),
   ];

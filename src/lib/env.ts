@@ -29,4 +29,11 @@ export const env = {
    * การส่งลิงก์เสียให้ผู้ใช้แย่กว่าการล้มดัง ๆ ตรงนี้
    */
   get liffUrl() { return `https://liff.line.me/${req('NEXT_PUBLIC_LIFF_ID')}`; },
+  /**
+   * ใช้ประกอบ URL ของไอคอนในปุ่ม quick reply
+   *
+   * ตั้งใจให้ไม่มีแล้วไม่พัง — ไอคอนหายไปเฉย ๆ ปุ่มยังกดได้เหมือนเดิม
+   * การทำให้ทั้งบอทเงียบเพราะไอคอนไม่ขึ้น เป็นการแลกที่ไม่คุ้ม
+   */
+  get baseUrl() { return opt('NEXT_PUBLIC_BASE_URL').replace(/\/+$/, ''); },
 };

@@ -34,40 +34,40 @@ export interface RenewAction {
 /** ใช้ตอน seed และเป็นตาข่ายรองถ้าอ่านฐานข้อมูลไม่ได้ */
 export const DEFAULT_RENEW_ACTIONS: Record<string, RenewAction[]> = {
   vehicle_tax: [
-    { kind: 'upsell', label: '🛵 ให้เราต่อให้' },
-    { kind: 'link', label: '🌐 ต่อภาษีออนไลน์', url: 'https://eservice.dlt.go.th' },
-    { kind: 'location', label: '📍 ตรอ. ใกล้ฉัน', searchTerm: 'ตรอ. ตรวจสภาพรถ' },
+    { kind: 'upsell', label: 'ให้เราต่อให้' },
+    { kind: 'link', label: 'ต่อภาษีออนไลน์', url: 'https://eservice.dlt.go.th' },
+    { kind: 'location', label: 'ตรอ. ใกล้ฉัน', searchTerm: 'ตรอ. ตรวจสภาพรถ' },
   ],
   cmi: [
-    { kind: 'upsell', label: '🛵 ให้เราต่อให้' },
-    { kind: 'location', label: '📍 ร้านต่อ พ.ร.บ. ใกล้ฉัน', searchTerm: 'ต่อ พ.ร.บ. ประกันภัยรถ' },
+    { kind: 'upsell', label: 'ให้เราต่อให้' },
+    { kind: 'location', label: 'ร้านต่อ พ.ร.บ.', searchTerm: 'ต่อ พ.ร.บ. ประกันภัยรถ' },
   ],
-  motor_insurance: [{ kind: 'upsell', label: '🛵 ให้เราเทียบราคาให้' }],
+  motor_insurance: [{ kind: 'upsell', label: 'เทียบราคาให้' }],
   vehicle_inspection: [
-    { kind: 'location', label: '📍 ตรอ. ใกล้ฉัน', searchTerm: 'ตรอ. ตรวจสภาพรถ' },
+    { kind: 'location', label: 'ตรอ. ใกล้ฉัน', searchTerm: 'ตรอ. ตรวจสภาพรถ' },
   ],
   driving_license: [
     // ต้องอบรมออนไลน์ให้เสร็จก่อนถึงจะไปต่อที่สำนักงานได้ ลำดับปุ่มจึงสำคัญ
-    { kind: 'link', label: '🌐 อบรมออนไลน์ก่อน', url: 'https://www.dlt.go.th' },
-    { kind: 'location', label: '📍 สำนักงานขนส่งใกล้ฉัน', searchTerm: 'สำนักงานขนส่งจังหวัด' },
+    { kind: 'link', label: 'อบรมออนไลน์ก่อน', url: 'https://www.dlt.go.th' },
+    { kind: 'location', label: 'สำนักงานขนส่ง', searchTerm: 'สำนักงานขนส่งจังหวัด' },
   ],
   national_id: [
-    { kind: 'location', label: '📍 ที่ว่าการอำเภอใกล้ฉัน', searchTerm: 'ที่ว่าการอำเภอ สำนักงานเขต' },
+    { kind: 'location', label: 'ที่ว่าการอำเภอ', searchTerm: 'ที่ว่าการอำเภอ สำนักงานเขต' },
   ],
   passport: [
-    { kind: 'link', label: '🌐 จองคิวทำพาสปอร์ต', url: 'https://consular.mfa.go.th' },
-    { kind: 'location', label: '📍 สำนักงานหนังสือเดินทาง', searchTerm: 'สำนักงานหนังสือเดินทาง' },
+    { kind: 'link', label: 'จองคิวพาสปอร์ต', url: 'https://consular.mfa.go.th' },
+    { kind: 'location', label: 'สนง.หนังสือเดินทาง', searchTerm: 'สำนักงานหนังสือเดินทาง' },
   ],
   social_security: [
-    { kind: 'link', label: '🌐 ประกันสังคมออนไลน์', url: 'https://www.sso.go.th' },
-    { kind: 'location', label: '📍 สนง.ประกันสังคมใกล้ฉัน', searchTerm: 'สำนักงานประกันสังคม' },
+    { kind: 'link', label: 'ประกันสังคมออนไลน์', url: 'https://www.sso.go.th' },
+    { kind: 'location', label: 'สนง.ประกันสังคม', searchTerm: 'สำนักงานประกันสังคม' },
   ],
   visa: [
-    { kind: 'link', label: '🌐 ตรวจคนเข้าเมือง', url: 'https://www.immigration.go.th' },
-    { kind: 'location', label: '📍 สนง.ตม. ใกล้ฉัน', searchTerm: 'สำนักงานตรวจคนเข้าเมือง' },
+    { kind: 'link', label: 'ตรวจคนเข้าเมือง', url: 'https://www.immigration.go.th' },
+    { kind: 'location', label: 'สนง.ตม. ใกล้ฉัน', searchTerm: 'สำนักงานตรวจคนเข้าเมือง' },
   ],
   work_permit: [
-    { kind: 'location', label: '📍 สนง.จัดหางานใกล้ฉัน', searchTerm: 'สำนักงานจัดหางานจังหวัด' },
+    { kind: 'location', label: 'สนง.จัดหางาน', searchTerm: 'สำนักงานจัดหางานจังหวัด' },
   ],
 };
 
