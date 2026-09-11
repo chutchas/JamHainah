@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  /*
+    LINE ครอบรูปโปรไฟล์เป็นวงกลม มุมทั้งสี่จึงหายไปเสมอ
+    ตัวอักษรต้องอยู่ในวงกลมด้านใน ไม่ใช่แค่อยู่ในสี่เหลี่ยม
+  */
+  body {
+    width: 640px; height: 640px;
+    display: flex; align-items: center; justify-content: center;
+    background: #06a44a;
+    font-family: 'Noto Sans Thai', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  /*
+    ใช้ตัวอักษรแทนรูป เพราะ LINE ย่อไอคอนนี้เหลือราว 60px ในรายการแชท
+    รูปที่มีรายละเอียดจะกลายเป็นจุดเขียว ๆ ตรงนั้น ตัวอักษรไม่กลาย
+    และ "จำ" คือคำที่สินค้านี้สัญญาไว้ทั้งคำ
+  */
+  .glyph {
+    font-size: 290px; font-weight: 600; color: #fff;
+    line-height: 1; letter-spacing: -.02em;
+    transform: translateY(14px);
+  }
+</style>
+<div class="glyph">จำ</div>

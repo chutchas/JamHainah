@@ -39,6 +39,7 @@ function everyMessage(): M.LineMessage[] {
     ...M.askDate({ documentId: 'd1', reason: 'edit' }),
     ...M.askType(),
     ...M.askPhotoFor('vehicle_tax'),
+    ...M.howToAdd(),
     ...M.correctedDate({ documentId: 'd1', typeKey: 'vehicle_tax', label: '1กก 1234', from: '2026-12-10', to: '2026-12-15', reminderDates: [], today: '2026-11-15' }),
     ...M.renewedFromNewCopy({ documentId: 'd1', typeKey: 'vehicle_tax', label: '1กก 1234', from: '2025-12-15', to: '2026-12-15', reminderDates: [], today: '2026-11-15' }),
     ...M.savedAndSuggestMore({ typeKey: 'vehicle_tax', reminderDates: [{ send_on: '2026-12-01', offset_days: -30 }], docCount: 1, today: '2026-11-15', expiry: '2026-12-15', ownedTypeKeys: [] }),

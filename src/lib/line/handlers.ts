@@ -489,6 +489,11 @@ async function onPostback(ev: Ev, userId: string) {
       return reply(ev.replyToken, M.toHuman());
     }
 
+    /* ---- rich menu : เพิ่มเอกสาร ---- */
+    case 'add':
+      await repo.track('richmenu_add', userId);
+      return reply(ev.replyToken, M.howToAdd());
+
     case 'list':
       return replyList(ev.replyToken);
 
