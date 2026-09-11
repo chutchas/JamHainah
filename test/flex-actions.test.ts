@@ -1,10 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-// messages.ts อ่าน env ตอนสร้างลิงก์ LIFF
-process.env.NEXT_PUBLIC_LIFF_ID ||= '1234567890-test';
+import * as M from '../src/lib/line/messages';
 
-const M = await import('../src/lib/line/messages');
+/**
+ * ตั้งก่อนได้เลยแม้ import จะถูกยกขึ้นไปบนสุด
+ * เพราะ env.ts อ่านค่าแบบ lazy ตอนเรียกใช้ ไม่ใช่ตอน import
+ * (ถ้าใช้ top-level await แทน tsx จะ transform เป็น CJS แล้วพัง)
+ */
+process.env.NEXT_PUBLIC_LIFF_ID ||= '1234567890-test';
 
 /**
  * LINE ให้ location / camera / cameraRoll ใช้ได้เฉพาะใน quick reply
