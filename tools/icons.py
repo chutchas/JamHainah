@@ -11,12 +11,18 @@
 import os
 import cairosvg
 
-GREEN = "#06A44A"
+# ไล่สีทแยงมุม เขียวอมฟ้าไปเขียวสด — ตัวเดียวกันทุกไอคอน
+# ไล่สีคนละองศาในแต่ละไอคอน จะทำให้ชุดดูไม่เป็นชุดเดียวกันทันที
+TEAL = "#0B8A72"
+GREEN = "#22A74C"
 W = 8  # เส้นหนา 8 ที่ 96px = 2px ตอนแสดงจริง
 
 HEAD = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">'
-    f'<g fill="none" stroke="{GREEN}" stroke-width="{W}" '
+    '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
+    f'<stop offset="0" stop-color="{TEAL}"/><stop offset="1" stop-color="{GREEN}"/>'
+    "</linearGradient></defs>"
+    f'<g fill="none" stroke="url(#g)" stroke-width="{W}" '
     'stroke-linecap="round" stroke-linejoin="round">'
 )
 TAIL = "</g></svg>"
@@ -74,9 +80,9 @@ ICONS = {
       <path d="M24 26h48a7 7 0 0 1 7 7v26a7 7 0 0 1-7 7H46L30 80V66h-6a7 7 0 0 1-7-7V33a7 7 0 0 1 7-7z"/>
     """,
     # ให้เราต่อให้ — บริการที่เราลงมือทำแทน
-    "spark": f"""
+    "spark": """
       <path d="M48 14c4 19 11 26 30 30-19 4-26 11-30 30-4-19-11-26-30-30 19-4 26-11 30-30z"
-            fill="{GREEN}" stroke-width="0"/>
+            fill="url(#g)" stroke-width="0"/>
     """,
     # เตือน / ยังก่อน
     "bell": """

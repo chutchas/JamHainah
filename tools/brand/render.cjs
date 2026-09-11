@@ -3,6 +3,7 @@ const { chromium } = require('playwright');
   const jobs = [
     ['richmenu.html', 'richmenu.png', 2500, 843],
     ['icon.html', 'oa-icon.png', 640, 640],
+    ['icon-b.html', 'oa-icon-b.png', 640, 640],
   ];
   const b = await chromium.launch();
   for (const [html, out, w, h] of jobs) {
@@ -10,8 +11,8 @@ const { chromium } = require('playwright');
     await p.goto('file://' + process.cwd() + '/' + html);
     await p.waitForTimeout(500);
     await p.screenshot({ path: out });
-    console.log(out, w + 'x' + h);
     await p.close();
   }
   await b.close();
+  console.log('done');
 })();

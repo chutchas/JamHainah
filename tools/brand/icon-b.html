@@ -9,7 +9,7 @@
   body {
     width: 640px; height: 640px;
     display: flex; align-items: center; justify-content: center;
-    background: linear-gradient(135deg, #0b8a72 0%, #22a74c 100%);
+    background: #ffffff;
     font-family: 'Noto Sans Thai', sans-serif;
     -webkit-font-smoothing: antialiased;
   }
@@ -19,7 +19,9 @@
     และ "จำ" คือคำที่สินค้านี้สัญญาไว้ทั้งคำ
   */
   .glyph {
-    font-size: 290px; font-weight: 600; color: #fff;
+    font-size: 290px; font-weight: 600;
+    background: linear-gradient(135deg, #0b8a72 0%, #22a74c 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
     line-height: 1; letter-spacing: -.02em;
     transform: translateY(14px);
   }
