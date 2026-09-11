@@ -114,7 +114,8 @@ export async function createDocument(args: {
   label?: string | null;
   expiryDate: ISODate;
   confirmed: boolean;
-  source: 'ocr' | 'manual';
+  /** ocr = อ่านจากรูป · text = ผู้ใช้พิมพ์บอก · manual = เลือกวันจากปฏิทินเอง */
+  source: 'ocr' | 'text' | 'manual';
   meta?: Record<string, unknown>;
   imagePath?: string | null;
 }): Promise<DocumentRow> {

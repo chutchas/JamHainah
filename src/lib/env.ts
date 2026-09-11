@@ -21,6 +21,8 @@ export const env = {
   openai: {
     get key() { return req('OPENAI_API_KEY'); },
     get model() { return opt('OPENAI_VISION_MODEL', 'gpt-4o'); },
+    /** อ่านข้อความที่พิมพ์มา — งานง่ายกว่าอ่านรูปมาก ใช้ตัวเล็กพอ */
+    get textModel() { return opt('OPENAI_TEXT_MODEL', 'gpt-4o-mini'); },
   },
   get cronSecret() { return req('CRON_SECRET'); },
   /**

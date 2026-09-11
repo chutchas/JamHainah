@@ -157,16 +157,25 @@ function bubble(body: LineMessage[], footer?: LineMessage[], altText = 'จำ�
  * ============================================================ */
 export function greeting(): LineMessage[] {
   return [
+    /**
+     * บอกวิธีใช้ทั้งสองทางตรงนี้ทีเดียว แล้วเหลือปุ่มเดียว
+     *
+     * "พิมพ์วันที่เอง" เคยเป็นปุ่มที่พาไปทางยาวที่สุดในระบบ
+     * กด → เลือกประเภท → เปิดปฏิทิน → เลื่อนหาปี → กดยืนยัน
+     * ห้าจังหวะ เพื่อบอกเรื่องที่พูดจบในประโยคเดียว
+     *
+     * ตอนนี้พิมพ์มาได้เลยโดยไม่ต้องกดอะไรก่อน ปุ่มนั้นจึงไม่มีเหตุผลให้อยู่ต่อ
+     * และประโยคตัวอย่างสอนได้ดีกว่าปุ่ม เพราะมันบอกด้วยว่าพิมพ์ยังไง
+     */
     text(
       'สวัสดีครับ 👋\n' +
         'ต่อไปนี้ผมจำวันหมดอายุเอกสารให้เอง\n' +
         'ภาษีรถ · พ.ร.บ. · ใบขับขี่ · ประกัน · พาสปอร์ต\n\n' +
         'ถ่ายรูปเอกสารส่งมาได้เลย\n' +
+        'หรือพิมพ์บอกก็ได้ครับ เช่น\n' +
+        '"พ.ร.บ. หมดอายุ 30 มิ.ย. 69"\n\n' +
         'ไม่ต้องสมัคร ไม่ต้องกรอกอะไรครับ',
-      chips([
-        { label: 'ส่งรูปเอกสาร', camera: true, icon: 'camera' },
-        { label: 'พิมพ์วันที่เอง', data: pb('manual'), icon: 'calendar' },
-      ])
+      chips([{ label: 'ส่งรูปเอกสาร', camera: true, icon: 'camera' }])
     ),
   ];
 }
@@ -331,8 +340,8 @@ export function askDate(args: { typeKey?: string; documentId?: string; reason?: 
     args.reason === 'edit'
       ? 'ได้ครับ เอกสารนี้หมดอายุวันไหนครับ'
       : args.reason === 'manual'
-      ? 'ได้ครับ เอกสารนี้หมดอายุวันไหนครับ'
-      : 'รูปไม่ค่อยชัดครับ 😅\nไม่เป็นไร บอกผมตรง ๆ ก็ได้\n\nเอกสารนี้หมดอายุวันไหนครับ';
+      ? 'ได้ครับ เอกสารนี้หมดอายุวันไหนครับ\nพิมพ์มาเลยก็ได้ เช่น "30 มิ.ย. 69"'
+      : 'รูปไม่ค่อยชัดครับ 😅\nไม่เป็นไร พิมพ์บอกผมตรง ๆ ก็ได้\n\nเอกสารนี้หมดอายุวันไหนครับ';
 
   const data = pb('setdate', {
     ...(args.documentId ? { d: args.documentId } : {}),
@@ -344,6 +353,27 @@ export function askDate(args: { typeKey?: string; documentId?: string; reason?: 
       { label: 'เลือกวันที่', data, date: true, icon: 'calendar' },
       { label: 'ถ่ายใหม่', camera: true, icon: 'camera' },
     ])),
+  ];
+}
+
+/**
+ * เลือกประเภทมาแล้ว เหลือแค่ตัวเลขวัน
+ *
+ * เคยเขียนเป็น quickReply ดิบ ๆ อยู่ใน handlers ซึ่งแปลว่าไอคอนกับกฎ 20 ตัวอักษร
+ * ไม่ผ่าน chips() — ข้อความที่สร้างนอกไฟล์นี้คือข้อความที่ลืมอัปเดต
+ */
+export function askPhotoFor(typeKey: string): LineMessage[] {
+  const t = docType(typeKey);
+  return [
+    text(
+      `ได้ครับ ${t.emoji} ${t.label}\n` +
+        `${t.hint ?? 'ถ่ายรูปหน้าที่มีวันหมดอายุมาได้เลย'}\n\n` +
+        'หรือพิมพ์วันหมดอายุมาตรง ๆ ก็ได้ครับ',
+      chips([
+        { label: 'ถ่ายรูป', camera: true, icon: 'camera' },
+        { label: 'เลือกวันที่', data: pb('setdate', { k: typeKey }), date: true, icon: 'calendar' },
+      ])
+    ),
   ];
 }
 
@@ -784,11 +814,11 @@ export function nearbyPlaces(places: Array<{ label: string; url: string }>): Lin
 export function notADocument(): LineMessage[] {
   return [
     text(
-      'อันนี้ผมอ่านไม่ออกครับ 😅\nส่งรูปเอกสารที่มีวันหมดอายุมาได้เลย',
-      chips([
-        { label: 'ถ่ายใหม่', camera: true, icon: 'camera' },
-        { label: 'พิมพ์วันที่เอง', data: pb('manual'), icon: 'calendar' },
-      ])
+      'อันนี้ผมอ่านไม่ออกครับ 😅\n' +
+        'ถ่ายใหม่ให้เห็นวันหมดอายุชัด ๆ ได้ไหมครับ\n\n' +
+        'หรือพิมพ์บอกผมตรง ๆ ก็ได้ เช่น\n' +
+        '"ภาษีรถ 1กก 1234 หมด 31 ธ.ค. 69"',
+      chips([{ label: 'ถ่ายใหม่', camera: true, icon: 'camera' }])
     ),
   ];
 }

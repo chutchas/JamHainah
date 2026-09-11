@@ -6,7 +6,8 @@
  */
 import { reply, getProfile, getMessageContent, showLoading } from './client';
 import * as M from './messages';
-import { ocr, CONFIDENCE_FLOOR } from '@/lib/ocr';
+import { ocr, extractFromText, CONFIDENCE_FLOOR } from '@/lib/ocr';
+import type { Extraction } from '@/lib/ocr';
 import { docType } from '@/lib/domain/docTypes';
 import { isISODate, todayInBangkok } from '@/lib/domain/thaiDate';
 import { env } from '@/lib/env';
@@ -44,6 +45,7 @@ async function onFollow(ev: Ev, userId: string) {
 async function onMessage(ev: Ev, userId: string) {
   await repo.upsertUser(userId);
   const msg = ev.message;
+  const today = todayInBangkok();
 
   if (msg?.type === 'image') return onImage(ev, userId, msg.id);
   if (msg?.type === 'location') return onLocation(ev, userId, msg);
@@ -61,6 +63,26 @@ async function onMessage(ev: Ev, userId: string) {
       await repo.track('to_human', userId, { text: t.slice(0, 200) });
       return reply(ev.replyToken, M.toHuman());
     }
+    /**
+     * ไม่เข้าคำสั่งไหน — ลองอ่านเป็นเอกสารก่อนที่จะยอมแพ้
+     *
+     * "พ.ร.บ. หมดอายุ 30 มิ.ย. 69" คือทางที่สั้นที่สุดสำหรับคนที่
+     * ไม่มีเอกสารอยู่ในมือตอนนั้น สั้นกว่าการกดปุ่มแล้วเลื่อนปฏิทินหลายจังหวะ
+     */
+    if (t.length >= 4) {
+      await showLoading(userId, 10);
+      try {
+        const fromText = await extractFromText(t, today);
+        if (fromText.isDocument && (fromText.docTypeKey || fromText.expiryDate)) {
+          const pendingNow = await repo.getPending(userId);
+          return saveExtraction({ ev, userId, extraction: fromText, today, pending: pendingNow, source: 'text' });
+        }
+      } catch (err) {
+        // อ่านข้อความไม่ได้ไม่ใช่เรื่องคอขาดบาดตาย ตกไปที่ fallback ตามเดิม
+        await repo.track('text_extract_error', userId, { message: String(err) });
+      }
+    }
+
     await repo.track('text_unmatched', userId, { text: t.slice(0, 200) });
     return reply(ev.replyToken, M.fallback());
   }
@@ -123,12 +145,31 @@ async function onImage(ev: Ev, userId: string, messageId: string) {
     return reply(ev.replyToken, M.notADocument());
   }
 
+  return saveExtraction({ ev, userId, extraction, today, pending, source: 'ocr' });
+}
+
+/**
+ * ทางเดินหลังอ่านเสร็จ — ใช้ร่วมกันทั้งรูปและข้อความที่พิมพ์มา
+ *
+ * สองทางเข้าต่างกันแค่วิธีอ่าน แต่คำถามที่เหลือเหมือนกันทุกข้อ
+ * (รู้ประเภทไหม · ได้วันที่ไหม · มีใบนี้อยู่แล้วหรือเปล่า)
+ * แยกโค้ดสองชุดเมื่อไหร่ ก็จะมีวันที่ทางหนึ่งได้ฟีเจอร์ อีกทางไม่ได้
+ */
+async function saveExtraction(args: {
+  ev: Ev;
+  userId: string;
+  extraction: Extraction;
+  today: string;
+  pending: repo.PendingState;
+  source: 'ocr' | 'text';
+}) {
+  const { ev, userId, extraction, today, pending, source } = args;
   const typeKey = extraction.docTypeKey ?? pending.docTypeKey ?? null;
 
   // ไม่รู้ว่าเอกสารอะไร — ถามผู้ใช้ ห้ามยัดลง "อื่น ๆ" แล้วเดาจังหวะเตือนเอง
   // แต่เก็บวันที่กับชื่อที่อ่านได้ไว้ก่อน จะได้ไม่ต้องให้เขาทำซ้ำ
   if (!typeKey) {
-    await repo.track('ocr_type_unknown', userId, { label: extraction.label });
+    await repo.track('type_unknown', userId, { label: extraction.label, source });
     await repo.setPending(userId, {
       awaiting: 'type',
       expiryDate: extraction.expiryDate ?? undefined,
@@ -140,9 +181,9 @@ async function onImage(ev: Ev, userId: string, messageId: string) {
 
   // อ่านไม่ชัด หรือไม่มีวันที่ — ไม่เดา ไปถามตรง ๆ (ฉาก 02b)
   if (!extraction.expiryDate || extraction.confidence < CONFIDENCE_FLOOR) {
-    await repo.track('ocr_miss', userId, { confidence: extraction.confidence, typeKey });
+    await repo.track('extract_miss', userId, { confidence: extraction.confidence, typeKey, source });
     await repo.setPending(userId, { awaiting: 'date', docTypeKey: typeKey, at: new Date().toISOString() });
-    return reply(ev.replyToken, M.askDate({ typeKey, reason: 'ocr_miss' }));
+    return reply(ev.replyToken, M.askDate({ typeKey, reason: source === 'text' ? 'manual' : 'ocr_miss' }));
   }
 
   const handled = await handleExisting({
@@ -157,12 +198,12 @@ async function onImage(ev: Ev, userId: string, messageId: string) {
     label: extraction.label,
     expiryDate: extraction.expiryDate,
     confirmed: false,
-    source: 'ocr',
+    source,
     meta: { ocr_confidence: extraction.confidence },
   });
 
   await repo.setPending(userId, null);
-  await repo.track('ocr_hit', userId, { typeKey, confidence: extraction.confidence });
+  await repo.track('extract_hit', userId, { typeKey, confidence: extraction.confidence, source });
 
   return reply(
     ev.replyToken,
@@ -297,18 +338,7 @@ async function onPostback(ev: Ev, userId: string) {
       }
       await repo.setPending(userId, { awaiting: t.ocr ? 'image' : 'date', docTypeKey: typeKey, at: new Date().toISOString() });
       if (!t.ocr) return reply(ev.replyToken, M.askDate({ typeKey, reason: 'manual' }));
-      return reply(ev.replyToken, [
-        {
-          type: 'text',
-          text: `ได้ครับ ${t.emoji} ${t.label}\n${t.hint ?? 'ถ่ายรูปหน้าที่มีวันหมดอายุมาได้เลย'}`,
-          quickReply: {
-            items: [
-              { type: 'action', action: { type: 'camera', label: '📸 ถ่ายรูป' } },
-              { type: 'action', action: { type: 'datetimepicker', label: '📅 พิมพ์วันที่เอง', data: M.pb('setdate', { k: typeKey }), mode: 'date' } },
-            ],
-          },
-        },
-      ]);
+      return reply(ev.replyToken, M.askPhotoFor(typeKey));
     }
 
     /* ---- ตอบว่าเป็นการต่ออายุใบเดิม ---- */

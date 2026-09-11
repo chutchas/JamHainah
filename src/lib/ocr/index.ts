@@ -13,3 +13,4 @@ export function ocr(): OcrProvider {
 }
 
 export * from './types';
+export { extractFromText } from './text';
