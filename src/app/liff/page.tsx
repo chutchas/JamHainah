@@ -35,6 +35,8 @@ interface Doc {
   confirmed: boolean;
   /** รอบที่ยังจะเตือน — ว่างได้ ถ้าหมดอายุไปแล้วหรือเพิ่งส่งครบ */
   reminders: Array<{ thai: string; when: string }>;
+  /** ไม่มีรอบค้างอยู่ = ประโยคบอกสถานะจริง · มีรอบค้าง = null */
+  reminderNote: string | null;
   /** ยังต่อไม่ได้ = วันที่เริ่มต่อได้ · ต่อได้แล้ว = null */
   renewOpensOn: string | null;
   actions: DocAction[];
@@ -374,7 +376,7 @@ export default function LiffPage() {
                   {/* คำถามแรกของคนที่เปิดดูคือ "แล้วจะเตือนฉันตอนไหน" ตอบก่อนเสมอ */}
                   <div className="sched">
                     {d.reminders.length === 0 ? (
-                      <span className="muted">ไม่มีรอบเตือนที่ค้างอยู่</span>
+                      <span className="muted">{d.reminderNote}</span>
                     ) : (
                       <>
                         <span className="muted">จะเตือน {d.reminders.length} ครั้ง</span>

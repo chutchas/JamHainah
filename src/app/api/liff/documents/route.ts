@@ -22,6 +22,16 @@ interface DocAction {
   term?: string;
 }
 
+/** ข้อความแทนรายการรอบเตือน เมื่อไม่มีรอบไหนค้างอยู่แล้ว */
+function noteFor(days: number): string {
+  if (days < 0) return `เตือนครบแล้ว — เลยกำหนดมา ${Math.abs(days)} วัน`;
+  if (days === 0) return 'เตือนครบแล้ว — ครบกำหนดวันนี้';
+  if (days === 1) return 'เตือนครบแล้ว — ครบกำหนดพรุ่งนี้';
+  if (days <= 90) return `เตือนครบแล้ว — ครบกำหนดอีก ${days} วัน`;
+  // ยังอีกไกล แปลว่ายังไม่ถึงคิว ไม่ใช่เตือนครบ (ใบที่ยังไม่ได้ยืนยันก็มาทางนี้)
+  return 'ยังไม่ถึงรอบเตือน ผมจะเตือนเมื่อใกล้ครบกำหนดครับ';
+}
+
 export async function GET(req: NextRequest) {
   const userId = await authenticate(req);
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -69,6 +79,14 @@ export async function GET(req: NextRequest) {
         status: days < 0 ? 'overdue' : days <= 30 ? 'soon' : days <= 90 ? 'watch' : 'ok',
         confirmed: d.confirmed_by_user,
         reminders: remindersByDoc.get(d.id) ?? [],
+        /**
+         * ไม่มีรอบค้างอยู่ ไม่ได้แปลว่าเราเลิกดูให้แล้ว
+         *
+         * "ไม่มีรอบเตือนที่ค้างอยู่" บนใบที่เหลือ 1 วัน อ่านแล้วชวนตกใจ
+         * ทั้งที่ความจริงคือเตือนไปครบแล้วต่างหาก
+         * ประโยคที่บอกสถานะจริงจึงต้องต่างกันตามว่ามันเหลืออีกกี่วัน
+         */
+        reminderNote: remindersByDoc.has(d.id) ? null : noteFor(days),
         /** ยังต่อไม่ได้ — บอกวันที่ต่อได้แทนการยื่นปุ่มให้เขาเสียเที่ยว */
         renewOpensOn: win.open ? null : formatThai(win.opensOn as string),
         /**
