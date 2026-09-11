@@ -35,6 +35,8 @@ interface Doc {
   confirmed: boolean;
   /** รอบที่ยังจะเตือน — ว่างได้ ถ้าหมดอายุไปแล้วหรือเพิ่งส่งครบ */
   reminders: Array<{ thai: string; when: string }>;
+  /** ยังต่อไม่ได้ = วันที่เริ่มต่อได้ · ต่อได้แล้ว = null */
+  renewOpensOn: string | null;
   actions: DocAction[];
 }
 
@@ -386,7 +388,9 @@ export default function LiffPage() {
                     )}
                   </div>
 
-                  {d.actions.length === 0 ? (
+                  {d.renewOpensOn ? (
+                    <p className="muted">ยังไม่ถึงรอบต่อครับ ต่อได้ตั้งแต่ {d.renewOpensOn}</p>
+                  ) : d.actions.length === 0 ? (
                     <p className="muted">เอกสารนี้ต่อที่หน่วยงานที่ออกให้ครับ</p>
                   ) : (
                     d.actions.map((a) =>

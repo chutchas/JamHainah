@@ -12,7 +12,7 @@
 import { ASK_TYPE_CHOICES, DocType, SUGGEST_BY_GROUP, displayName, docType } from '@/lib/domain/docTypes';
 import { ISODate, daysBetween, formatThai, humanRemaining } from '@/lib/domain/thaiDate';
 import { env } from '@/lib/env';
-import { RenewAction, mapsSearchUrl } from '@/lib/domain/renewActions';
+import { RenewAction, mapsSearchUrl, renewWindow } from '@/lib/domain/renewActions';
 
 export type LineMessage = Record<string, unknown>;
 
@@ -490,7 +490,9 @@ export function upcomingReminder(
   const footer: LineMessage[] = [];
   const quick: Array<{ label: string; data?: string; liff?: boolean; locate?: boolean }> = [];
 
-  for (const a of (actionsByType[soonest.typeKey] ?? []).slice(0, 4)) {
+  // ปุ่มขึ้นเฉพาะตอนที่ทำได้จริง — ปุ่มที่กดแล้วไปเจอ "ยังต่อไม่ได้ครับ" แย่กว่าไม่มีปุ่ม
+  const win = renewWindow(soonest.typeKey, soonest.expiry, today);
+  for (const a of (win.open ? actionsByType[soonest.typeKey] ?? [] : []).slice(0, 4)) {
     if (a.kind === 'upsell') {
       const price = docType(soonest.typeKey).upsell?.price;
       footer.push(button(`${a.label}${price ? ` · ${price}฿` : ''}`, pb('upsell', { d: soonest.documentId }), 'primary'));
@@ -524,7 +526,9 @@ export function upcomingReminder(
   const card = bubble(
       [
         { type: 'text', text: header, weight: 'bold', size: 'md', wrap: true },
-        ...(early && t.renewWindowDays
+        ...(!win.open && win.opensOn
+          ? [{ type: 'text', text: `ยังไม่ถึงรอบต่อ — ต่อได้ตั้งแต่ ${formatThai(win.opensOn)}`, size: 'xs', color: MUTED, wrap: true }]
+          : early && t.renewWindowDays
           ? [{ type: 'text', text: 'ต่อตอนนี้ไม่มีค่าปรับ และไม่ต้องรีบ', size: 'xs', color: MUTED, wrap: true }]
           : []),
         { type: 'separator', margin: 'md' },

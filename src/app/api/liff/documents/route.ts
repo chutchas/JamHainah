@@ -9,7 +9,7 @@ import { authenticateLiff as authenticate } from '@/lib/line/liffAuth';
 import * as repo from '@/lib/db/repo';
 import { docType } from '@/lib/domain/docTypes';
 import { formatThai, daysBetween, todayInBangkok } from '@/lib/domain/thaiDate';
-import { loadRenewActions, mapsSearchUrl } from '@/lib/domain/renewActions';
+import { loadRenewActions, mapsSearchUrl, renewWindow } from '@/lib/domain/renewActions';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
     documents: docs.map((d) => {
       const t = docType(d.doc_type);
       const days = daysBetween(today, d.expiry_date);
+      const win = renewWindow(d.doc_type, d.expiry_date, today);
       return {
         id: d.id,
         emoji: t.emoji,
@@ -68,12 +69,18 @@ export async function GET(req: NextRequest) {
         status: days < 0 ? 'overdue' : days <= 30 ? 'soon' : days <= 90 ? 'watch' : 'ok',
         confirmed: d.confirmed_by_user,
         reminders: remindersByDoc.get(d.id) ?? [],
+        /** ยังต่อไม่ได้ — บอกวันที่ต่อได้แทนการยื่นปุ่มให้เขาเสียเที่ยว */
+        renewOpensOn: win.open ? null : formatThai(win.opensOn as string),
         /**
          * "เหลือกี่วัน" อย่างเดียวไม่พอ — รู้ว่าเหลือ 12 วันแล้วต้องไปทำอะไรต่อ
          * ปุ่มชุดนี้คือคำตอบ และมาจากตาราง renew_actions ชุดเดียวกับที่ใช้ในแชท
          * จะได้ไม่มีวันที่แชทบอกอย่าง หน้าเว็บบอกอีกอย่าง
          */
-        actions: (actionsByType[d.doc_type] ?? []).slice(0, 4).flatMap((a): DocAction[] => {
+        /**
+         * ปุ่มขึ้นเฉพาะตอนที่ทำได้จริง
+         * ยื่นปุ่ม "ต่อภาษีออนไลน์" ให้คนที่เหลืออีก 300 วัน คือพาเขาไปเจอหน้าเว็บที่ปฏิเสธเขา
+         */
+        actions: (win.open ? actionsByType[d.doc_type] ?? [] : []).slice(0, 4).flatMap((a): DocAction[] => {
           if (a.kind === 'upsell') return [{ kind: 'upsell', label: a.label }];
           if (a.kind === 'link' && a.url) return [{ kind: 'link', label: a.label, url: a.url }];
           if (a.kind === 'location' && a.searchTerm) {

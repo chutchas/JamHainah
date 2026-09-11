@@ -17,6 +17,8 @@
  * ─────────────────────────────────────────────────────────────
  */
 import { db } from '@/lib/db/client';
+import { docType } from '@/lib/domain/docTypes';
+import { ISODate, addDays, daysBetween } from '@/lib/domain/thaiDate';
 
 export type RenewActionKind = 'upsell' | 'link' | 'location';
 
@@ -120,4 +122,27 @@ export function mapsSearchUrl(searchTerm: string, lat?: number, lng?: number): s
   const q = `https://www.google.com/maps/search/${encodeURIComponent(searchTerm)}`;
   // มีพิกัดก็ปักหมุดให้ตรงขึ้น (ใช้ตอนผู้ใช้แชร์ตำแหน่งมาเอง)
   return lat != null && lng != null ? `${q}/@${lat},${lng},14z` : q;
+}
+
+/**
+ * ต่ออายุได้แล้วหรือยัง
+ *
+ * ปุ่มที่กดแล้วไปเจอ "ยังต่อไม่ได้ครับ" หน้าเคาน์เตอร์ แย่กว่าไม่มีปุ่ม
+ * ภาษีรถต่อล่วงหน้าได้ 90 วัน บัตรประชาชน 60 วัน — ก่อนหน้านั้นไม่มีอะไรให้ทำ
+ * สิ่งที่ควรบอกคือ "ต่อได้ตั้งแต่วันไหน" ไม่ใช่ยื่นปุ่มให้เขาเสียเที่ยว
+ *
+ * ประเภทที่ไม่ได้กำหนดช่วงไว้ (ประกัน พาสปอร์ต) ทำได้ตลอด ไม่ต้องกั้น
+ */
+export function renewWindow(
+  typeKey: string,
+  expiry: ISODate,
+  today: ISODate
+): { open: boolean; opensOn?: ISODate } {
+  const window = docType(typeKey).renewWindowDays;
+  if (!window) return { open: true };
+
+  const daysLeft = daysBetween(today, expiry);
+  // เลยกำหนดแล้วยิ่งต้องรีบ ไม่ใช่ปิดปุ่มใส่
+  if (daysLeft <= window) return { open: true };
+  return { open: false, opensOn: addDays(expiry, -window) };
 }

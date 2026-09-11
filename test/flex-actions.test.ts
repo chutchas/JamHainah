@@ -133,3 +133,39 @@ test('มีการ์ดเตือนด่วนต่อท้าย ต�
   });
   assert.ok(normal.length > 1, 'เคสปกติยังต้องชวนเพิ่มเหมือนเดิม');
 });
+
+test('ยังไม่ถึงรอบต่อ ต้องไม่มีปุ่มต่ออายุ', () => {
+  // ภาษีรถต่อล่วงหน้าได้ 90 วัน — เหลืออีก 300 วัน ปุ่มพวกนี้กดไปก็เสียเที่ยว
+  const actions = {
+    vehicle_tax: [
+      { kind: 'upsell' as const, label: '🛵 ให้เราต่อให้' },
+      { kind: 'link' as const, label: '💻 ต่อภาษีออนไลน์', url: 'https://eservice.dlt.go.th' },
+      { kind: 'location' as const, label: '📍 ตรอ. ใกล้ฉัน', searchTerm: 'ตรอ.' },
+    ],
+  };
+  const far = { documentId: 'd1', typeKey: 'vehicle_tax', label: '1กก 1234', expiry: '2027-09-11', offsetDays: -300 };
+  const [card] = M.upcomingReminder([far], '2026-11-15', actions) as any[];
+
+  const labels: string[] = [];
+  const walk = (n: any) => {
+    if (Array.isArray(n)) return n.forEach(walk);
+    if (!n || typeof n !== 'object') return;
+    if (n.type === 'button' && n.action?.label) labels.push(n.action.label);
+    for (const [k, v] of Object.entries(n)) if (k !== 'quickReply') walk(v);
+  };
+  walk(card);
+  assert.deepEqual(labels, ['✅ ต่อเองแล้ว'], 'เหลือแค่ปุ่มที่ยังมีความหมาย');
+
+  // แต่พอถึงช่วงต่อได้ ปุ่มต้องกลับมาครบ
+  const near = { ...far, expiry: '2026-12-15', offsetDays: -30 };
+  const [ok] = M.upcomingReminder([near], '2026-11-15', actions) as any[];
+  const okLabels: string[] = [];
+  const walk2 = (n: any) => {
+    if (Array.isArray(n)) return n.forEach(walk2);
+    if (!n || typeof n !== 'object') return;
+    if (n.type === 'button' && n.action?.label) okLabels.push(n.action.label);
+    for (const [k, v] of Object.entries(n)) if (k !== 'quickReply') walk2(v);
+  };
+  walk2(ok);
+  assert.equal(okLabels.length, 4);
+});
