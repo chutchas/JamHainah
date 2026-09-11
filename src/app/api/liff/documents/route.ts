@@ -27,11 +27,28 @@ export async function GET(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
   const today = todayInBangkok();
-  const [docs, actionsByType, area] = await Promise.all([
+  const [docs, actionsByType, area, queue] = await Promise.all([
     repo.listDocuments(userId),
     loadRenewActions(),
     repo.getUserArea(userId),
+    repo.listPendingReminders(userId),
   ]);
+
+  /**
+   * รอบเตือนของแต่ละใบ — หน้ารายการเคยบอกแค่ "เหลือกี่วัน"
+   * ซึ่งไม่ได้ตอบคำถามที่คนกังวลจริง ๆ ว่า "แล้วจะเตือนฉันตอนไหน"
+   * ถ้าเขาไม่เห็นคำตอบนี้ เขาก็ต้องคอยกลับมาเช็กเอง — สิ่งเดียวที่เราสัญญาว่าเขาไม่ต้องทำ
+   */
+  const remindersByDoc = new Map<string, Array<{ thai: string; when: string }>>();
+  for (const r of queue) {
+    if (r.offset_days > 0 || r.send_on <= today) continue; // ส่งไปแล้วหรือถึงคิววันนี้ ไม่ใช่ "จะเตือน"
+    const list = remindersByDoc.get(r.document_id) ?? [];
+    list.push({
+      thai: formatThai(r.send_on),
+      when: r.offset_days <= -60 ? 'วันแรกที่ต่อได้' : `เหลือ ${Math.abs(r.offset_days)} วัน`,
+    });
+    remindersByDoc.set(r.document_id, list);
+  }
 
   return NextResponse.json({
     today,
@@ -50,6 +67,7 @@ export async function GET(req: NextRequest) {
         days,
         status: days < 0 ? 'overdue' : days <= 30 ? 'soon' : days <= 90 ? 'watch' : 'ok',
         confirmed: d.confirmed_by_user,
+        reminders: remindersByDoc.get(d.id) ?? [],
         /**
          * "เหลือกี่วัน" อย่างเดียวไม่พอ — รู้ว่าเหลือ 12 วันแล้วต้องไปทำอะไรต่อ
          * ปุ่มชุดนี้คือคำตอบ และมาจากตาราง renew_actions ชุดเดียวกับที่ใช้ในแชท

@@ -287,6 +287,22 @@ export async function regenerateReminders(doc: DocumentRow, today: ISODate) {
 }
 
 /**
+ * รอบเตือนที่ยังไม่ได้ส่งของผู้ใช้คนนี้ทั้งหมด — ดึงทีเดียวแล้วค่อยแยกตามเอกสาร
+ * ถ้าไล่ยิงทีละใบ คนที่มี 8 รายการจะเปิดหน้ารายการช้าขึ้นแบบไม่มีเหตุผล
+ */
+export async function listPendingReminders(
+  lineUserId: string
+): Promise<Array<{ document_id: string; send_on: ISODate; offset_days: number }>> {
+  const { data } = await db()
+    .from('reminder_queue')
+    .select('document_id, send_on, offset_days')
+    .eq('line_user_id', lineUserId)
+    .eq('status', 'pending')
+    .order('send_on');
+  return (data as Array<{ document_id: string; send_on: ISODate; offset_days: number }>) ?? [];
+}
+
+/**
  * ทำเครื่องหมายว่าส่งไปแล้ว — ใช้ตอนที่เราส่งการเตือนไปกับ reply แล้ว
  * ไม่งั้น cron รอบถัดไปจะส่งซ้ำอีกครั้ง และครั้งนั้นเสียเงินด้วย
  */

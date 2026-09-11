@@ -33,6 +33,8 @@ interface Doc {
   days: number;
   status: 'ok' | 'watch' | 'soon' | 'overdue';
   confirmed: boolean;
+  /** รอบที่ยังจะเตือน — ว่างได้ ถ้าหมดอายุไปแล้วหรือเพิ่งส่งครบ */
+  reminders: Array<{ thai: string; when: string }>;
   actions: DocAction[];
 }
 
@@ -367,6 +369,23 @@ export default function LiffPage() {
 
               {trayId === d.id && !selectMode && (
                 <div className="tray">
+                  {/* คำถามแรกของคนที่เปิดดูคือ "แล้วจะเตือนฉันตอนไหน" ตอบก่อนเสมอ */}
+                  <div className="sched">
+                    {d.reminders.length === 0 ? (
+                      <span className="muted">ไม่มีรอบเตือนที่ค้างอยู่</span>
+                    ) : (
+                      <>
+                        <span className="muted">จะเตือน {d.reminders.length} ครั้ง</span>
+                        {d.reminders.map((r) => (
+                          <span className="sched-r" key={r.thai}>
+                            <span>📅 {r.thai}</span>
+                            <span className="muted">{r.when}</span>
+                          </span>
+                        ))}
+                      </>
+                    )}
+                  </div>
+
                   {d.actions.length === 0 ? (
                     <p className="muted">เอกสารนี้ต่อที่หน่วยงานที่ออกให้ครับ</p>
                   ) : (
