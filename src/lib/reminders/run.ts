@@ -134,6 +134,25 @@ export async function runReminders() {
     estimated_cost_thb: Number((sentMessages * 0.06).toFixed(2)),
   };
   await track('cron_run', null, summary);
+
+  // ล้างรูปที่เลยกำหนดเก็บ — ทำท้ายรอบนี้แทนการกิน cron slot ไปอีกอัน
+  // (Vercel Hobby ให้แค่ 2 slot และเราต้องใช้กับรอบเตือนทั้งคู่)
+  // ตอนนี้เป็น no-op เพราะเราไม่เก็บรูปเลย แต่เผื่ออนาคตเปลี่ยนใจ
+  try {
+    const { data: stale } = await supabase
+      .from('documents')
+      .select('id, image_path')
+      .not('image_path', 'is', null)
+      .lte('image_purge_after', today)
+      .limit(500);
+    for (const r of (stale as Array<{ id: string; image_path: string }>) ?? []) {
+      await supabase.storage.from('documents').remove([r.image_path]).catch(() => {});
+      await supabase.from('documents').update({ image_path: null, image_purge_after: null }).eq('id', r.id);
+    }
+  } catch (err) {
+    console.error('[cron] purge images failed', err);
+  }
+
   return summary;
 }
 

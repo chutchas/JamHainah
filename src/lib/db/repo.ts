@@ -266,10 +266,22 @@ export async function regenerateReminders(doc: DocumentRow, today: ISODate) {
     expiryDate: doc.expiry_date,
     today,
   });
-  if (rows.length === 0) return rows;
-  const { error } = await db().from('reminder_queue').insert(rows);
+  if (rows.length === 0) return [];
+  const { data, error } = await db().from('reminder_queue').insert(rows).select();
   if (error) throw new Error(`regenerateReminders: ${error.message}`);
-  return rows;
+  return (data as Array<(typeof rows)[number] & { id: string }>) ?? [];
+}
+
+/**
+ * ทำเครื่องหมายว่าส่งไปแล้ว — ใช้ตอนที่เราส่งการเตือนไปกับ reply แล้ว
+ * ไม่งั้น cron รอบถัดไปจะส่งซ้ำอีกครั้ง และครั้งนั้นเสียเงินด้วย
+ */
+export async function markRemindersSent(ids: string[]) {
+  if (ids.length === 0) return;
+  await db()
+    .from('reminder_queue')
+    .update({ status: 'sent', sent_at: new Date().toISOString() })
+    .in('id', ids);
 }
 
 /* ---------------- events ---------------- */

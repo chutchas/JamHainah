@@ -336,12 +336,16 @@ export function savedAndSuggestMore(args: {
   /** ประเภทที่ผู้ใช้มีอยู่แล้ว — ของที่มีได้ใบเดียวจะไม่ถูกชวนซ้ำ */
   ownedTypeKeys?: string[];
 }): LineMessage[] {
+  /**
+   * รอบที่ถึงกำหนดวันนี้ถูกส่งไปกับข้อความเดียวกันนี้แล้ว (inlineDueToday)
+   * จึงห้ามเอามาลิสต์ว่า "จะเตือน" — มันอยู่ตรงหน้าเขาแล้ว
+   */
   const upcoming = args.reminderDates.filter((r) => r.offset_days <= 0);
-  const lines = upcoming.map((r) => {
-    const when =
-      r.send_on === args.today ? 'วันนี้เลย'
-      : r.offset_days <= -60 ? 'วันแรกที่ต่อได้'
-      : `เหลือ ${Math.abs(r.offset_days)} วัน`;
+  const sentNow = upcoming.filter((r) => r.send_on <= args.today);
+  const future = upcoming.filter((r) => r.send_on > args.today);
+
+  const lines = future.map((r) => {
+    const when = r.offset_days <= -60 ? 'วันแรกที่ต่อได้' : `เหลือ ${Math.abs(r.offset_days)} วัน`;
     return `📅 ${formatThai(r.send_on)} — ${when}`;
   });
 
@@ -350,16 +354,24 @@ export function savedAndSuggestMore(args: {
     ? `หมดอายุ ${formatThai(args.expiry)} (${humanRemaining(args.today, args.expiry)})\n\n`
     : '';
 
-  const head =
-    upcoming.length > 0
-      ? `บันทึกแล้วครับ ✅\n${summary}ผมจะเตือนคุณ ${upcoming.length} ครั้ง\n${lines.join('\n')}\n\nลืมได้เลยครับ ผมจำให้แล้ว`
-      : `บันทึกแล้วครับ ✅\n${summary}ผมจะเตือนเมื่อใกล้ครบกำหนดครับ`;
+  let head: string;
+  if (sentNow.length > 0) {
+    // ใกล้ครบกำหนดจนต้องบอกเดี๋ยวนี้ — การ์ดเตือนต่อท้ายข้อความนี้เลย
+    head =
+      `บันทึกแล้วครับ ✅\n${summary}` +
+      `ใกล้ครบกำหนดแล้ว ผมบอกรายละเอียดไว้ข้างล่างเลยครับ 👇` +
+      (lines.length > 0 ? `\n\nแล้วจะเตือนอีก ${lines.length} ครั้ง\n${lines.join('\n')}` : '');
+  } else if (lines.length > 0) {
+    head = `บันทึกแล้วครับ ✅\n${summary}ผมจะเตือนคุณ ${lines.length} ครั้ง\n${lines.join('\n')}\n\nลืมได้เลยครับ ผมจำให้แล้ว`;
+  } else {
+    head = `บันทึกแล้วครับ ✅\n${summary}ผมจะเตือนเมื่อใกล้ครบกำหนดครับ`;
+  }
 
   const out: LineMessage[] = [text(head)];
 
   if (args.docCount >= 3) {
     // ฉาก 04 — สัญญาว่าจะเงียบ
-    const next = upcoming[0];
+    const next = future[0];
     out.push(
       text(
         `เยี่ยมครับ ตอนนี้ผมดูให้ ${args.docCount} รายการ 🎉\n\n` +

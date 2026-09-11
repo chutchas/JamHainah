@@ -198,10 +198,14 @@ async function onPostback(ev: Ev, userId: string) {
       const owned = await repo.listDocTypeKeys(userId);
       await repo.track('doc_confirmed', userId, { typeKey: doc.doc_type, docCount: count });
 
-      return reply(ev.replyToken, M.savedAndSuggestMore({
-        typeKey: doc.doc_type, reminderDates: rows, docCount: count, today,
-        expiry: doc.expiry_date, ownedTypeKeys: owned,
-      }));
+      const urgent = await inlineDueToday({ userId, today, queued: rows, doc });
+      return reply(ev.replyToken, [
+        ...M.savedAndSuggestMore({
+          typeKey: doc.doc_type, reminderDates: rows, docCount: count, today,
+          expiry: doc.expiry_date, ownedTypeKeys: owned,
+        }),
+        ...urgent,
+      ]);
     }
 
     /* ---- ผู้ใช้กด "แก้ไขวันที่" = ตัวอย่างที่โมเดลอ่านพลาด (ของมีค่า) ---- */
@@ -238,10 +242,14 @@ async function onPostback(ev: Ev, userId: string) {
       await repo.setPending(userId, null);
       await repo.track('doc_confirmed', userId, { typeKey: doc.doc_type, docCount: count, source: 'manual' });
 
-      return reply(ev.replyToken, M.savedAndSuggestMore({
-        typeKey: doc.doc_type, reminderDates: rows, docCount: count, today,
-        expiry: doc.expiry_date, ownedTypeKeys: ownedNow,
-      }));
+      const urgentNow = await inlineDueToday({ userId, today, queued: rows, doc });
+      return reply(ev.replyToken, [
+        ...M.savedAndSuggestMore({
+          typeKey: doc.doc_type, reminderDates: rows, docCount: count, today,
+          expiry: doc.expiry_date, ownedTypeKeys: ownedNow,
+        }),
+        ...urgentNow,
+      ]);
     }
 
     /* ---- เลือกประเภทเอกสารจากชิป ---- */
@@ -518,6 +526,45 @@ async function handleExisting(args: {
     })
   );
   return true;
+}
+
+/**
+ * เอกสารที่เพิ่งบันทึกแล้วถึงกำหนดเตือนวันนี้เลย
+ *
+ * ไม่ต้องรอ cron รอบถัดไป เพราะผู้ใช้อยู่ในแชทกับเราตอนนี้
+ * — รอไปอีกครึ่งวันแล้วค่อยเตือนเรื่องที่เขาเพิ่งพิมพ์เองเมื่อกี้ มันแปลก
+ *
+ * และส่งไปกับ reply ที่กำลังจะส่งอยู่แล้ว จึงไม่เสีย ฿0.06
+ * ต่างจากการให้ cron ยิง push ทีหลัง
+ */
+async function inlineDueToday(args: {
+  userId: string;
+  today: string;
+  queued: Array<{ id: string; send_on: string; offset_days: number; kind: string; document_id: string }>;
+  doc: repo.DocumentRow;
+}): Promise<M.LineMessage[]> {
+  const dueNow = args.queued.filter((r) => r.kind === 'upcoming' && r.send_on <= args.today);
+  if (dueNow.length === 0) return [];
+
+  const actionsByType = await loadRenewActions();
+  const msgs = M.upcomingReminder(
+    [{
+      documentId: args.doc.id,
+      typeKey: args.doc.doc_type,
+      label: args.doc.label,
+      expiry: args.doc.expiry_date,
+      offsetDays: dueNow[0].offset_days,
+    }],
+    args.today,
+    actionsByType
+  );
+
+  // ปิดคิวทิ้ง ไม่งั้น cron พรุ่งนี้จะส่งซ้ำ และครั้งนั้นเสียเงิน
+  await repo.markRemindersSent(dueNow.map((r) => r.id));
+  await repo.track('reminder_sent_inline', args.userId, {
+    typeKey: args.doc.doc_type, count: dueNow.length, cost_thb: 0,
+  });
+  return msgs;
 }
 
 function replyList(replyToken: string) {
