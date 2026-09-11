@@ -23,7 +23,7 @@
   .cell {
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
-    gap: 46px;
+    gap: 40px;
     /*
       ดันขึ้นจากกึ่งกลางเล็กน้อย เพราะส่วนล่างของพื้นหลังเป็นคลื่นสีเข้ม
       ตัวอักษรเขียวทับตรงนั้นจะอ่านยาก
@@ -31,14 +31,18 @@
     padding-bottom: 70px;
   }
 
-  .ico { width: 205px; height: 205px; }
+  .ico { width: 250px; height: 250px; }
 
+  /*
+    ตัวอักษรใช้สีเดียว ไม่ไล่สี
+    ปลายไล่สีเป็นเขียวมิ้นต์อ่อน ซึ่งบนพื้นหลังอ่อนแบบนี้แทบอ่านไม่ออก
+    ไอคอนยังไล่สีได้เพราะเป็นรูปทรง ไม่ใช่ตัวหนังสือที่ต้องอ่าน
+  */
   .label {
-    font-size: 78px; font-weight: 700; line-height: 1.25;
-    background: linear-gradient(135deg, var(--teal) 0%, var(--mint) 100%);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-    /* ขอบขาวบาง ๆ กันตัวอักษรจมไปกับลายพื้นหลัง */
-    filter: drop-shadow(0 0 10px rgba(255,255,255,.95)) drop-shadow(0 0 22px rgba(255,255,255,.8));
+    font-size: 92px; font-weight: 700; line-height: 1.25;
+    color: var(--teal);
+    /* เงาขาวฟุ้งบาง ๆ กันตัวอักษรจมไปกับลายพื้นหลัง */
+    text-shadow: 0 0 14px rgba(255,255,255,.95), 0 0 28px rgba(255,255,255,.85);
   }
 </style>
 
