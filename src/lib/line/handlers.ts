@@ -612,7 +612,10 @@ async function inlineDueToday(args: {
   const dueNow = args.queued.filter((r) => r.kind === 'upcoming' && r.send_on <= args.today);
   if (dueNow.length === 0) return [];
 
-  const actionsByType = await loadRenewActions();
+  const [actionsByType, area] = await Promise.all([
+    loadRenewActions(),
+    repo.getUserArea(args.userId),
+  ]);
   const msgs = M.upcomingReminder(
     [{
       documentId: args.doc.id,
@@ -622,7 +625,8 @@ async function inlineDueToday(args: {
       offsetDays: dueNow[0].offset_days,
     }],
     args.today,
-    actionsByType
+    actionsByType,
+    area
   );
 
   // ปิดคิวทิ้ง ไม่งั้น cron พรุ่งนี้จะส่งซ้ำ และครั้งนั้นเสียเงิน

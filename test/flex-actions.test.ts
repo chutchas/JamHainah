@@ -122,12 +122,23 @@ test('การ์ด Flex ต้องไม่มีปุ่มเหลื�
 test('ปุ่ม "ใกล้ฉัน" ต้องค้นหาให้ทันที ไม่ใช่เปิดหน้าเลือกสถานที่เปล่า ๆ', () => {
   const [card] = M.upcomingReminder([items[1]], '2026-11-15', ACTIONS) as any[];
   const uris = quickItems(card).map((i: any) => i.action.uri).filter(Boolean);
+  /**
+   * ไม่มีพิกัดต้องใช้แบบ ?api=1&query= เท่านั้น
+   * แบบใส่คำค้นไว้ใน path เฉย ๆ Google จะเดาให้หนึ่งที่แล้วปักหมุดอันนั้นเลย
+   * ซึ่งกลายเป็นสำนักงานคนละจังหวัดที่อยู่ห่างออกไปหลายสิบกิโล
+   */
   assert.ok(
     uris.some((u: string) =>
-      u.startsWith('https://www.google.com/maps/search/') && u.includes(encodeURIComponent('ที่ว่าการอำเภอ'))
+      u.startsWith('https://www.google.com/maps/search/?api=1&query=') &&
+      u.includes(encodeURIComponent('ที่ว่าการอำเภอ'))
     ),
-    'ต้องมีปุ่มเปิด Google Maps พร้อมคำค้น'
+    'ไม่มีพิกัด ต้องเป็นลิงก์ค้นหาจริง ไม่ใช่ลิงก์ที่ Google เดาที่ให้'
   );
+
+  // มีพิกัด = ค้นรอบตัวเขา ผลลัพธ์เป็นรายการให้เลือก ไม่ใช่หมุดเดียว
+  const [near] = M.upcomingReminder([items[1]], '2026-11-15', ACTIONS, { lat: 13.82, lng: 100.53 }) as any[];
+  const nearUris = quickItems(near).map((i: any) => i.action.uri).filter(Boolean);
+  assert.ok(nearUris.some((u: string) => u.includes('/@13.82,100.53,')));
   // location action เปิดได้แค่หน้าเลือกสถานที่ของ LINE ซึ่งไม่รับคำค้นของเรา
   assert.ok(!quickItems(card).some((i: any) => i.action.type === 'location'));
 });

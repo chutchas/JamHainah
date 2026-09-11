@@ -119,9 +119,22 @@ export async function loadRenewActions(): Promise<Record<string, RenewAction[]>>
  * ไม่ใช่เปิดหน้าเลือกสถานที่เปล่า ๆ แล้วรอให้ผู้ใช้พิมพ์เอง
  */
 export function mapsSearchUrl(searchTerm: string, lat?: number, lng?: number): string {
-  const q = `https://www.google.com/maps/search/${encodeURIComponent(searchTerm)}`;
-  // มีพิกัดก็ปักหมุดให้ตรงขึ้น (ใช้ตอนผู้ใช้แชร์ตำแหน่งมาเอง)
-  return lat != null && lng != null ? `${q}/@${lat},${lng},14z` : q;
+  const q = encodeURIComponent(searchTerm);
+  /**
+   * มีพิกัด = บอก Google ว่าให้ค้นรอบ ๆ ตรงนี้ ผลลัพธ์จึงเป็น "รายการที่ใกล้"
+   * ให้ผู้ใช้เลือกเอง ซึ่งเป็นสิ่งที่ปุ่มชื่อ "...ใกล้ฉัน" สัญญาไว้
+   */
+  if (lat != null && lng != null) {
+    return `https://www.google.com/maps/search/${q}/@${lat},${lng},13z`;
+  }
+  /**
+   * ไม่มีพิกัด ต้องใช้แบบ ?api=1&query= เท่านั้น
+   *
+   * แบบใส่คำค้นไว้ใน path เฉย ๆ Google จะ "เดาให้หนึ่งที่" แล้วปักหมุดอันนั้นเลย
+   * ซึ่งกลายเป็นสำนักงานขนส่งคนละจังหวัดที่อยู่ห่างออกไป 40 กม.
+   * แบบ api=1 เป็นการค้นหาจริง Maps จึงใช้ตำแหน่งของเครื่องเป็นจุดตั้งต้นเอง
+   */
+  return `https://www.google.com/maps/search/?api=1&query=${q}`;
 }
 
 /**

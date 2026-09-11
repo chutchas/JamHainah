@@ -552,7 +552,9 @@ export interface ReminderItem {
 export function upcomingReminder(
   items: ReminderItem[],
   today: ISODate,
-  actionsByType: Record<string, RenewAction[]> = {}
+  actionsByType: Record<string, RenewAction[]> = {},
+  /** พิกัดหยาบที่ผู้ใช้เคยแชร์ไว้ — ทำให้ลิงก์แผนที่ค้นรอบตัวเขาจริง ๆ */
+  area?: { lat: number; lng: number } | null
 ): LineMessage[] {
   if (items.length === 0) return [];
 
@@ -615,7 +617,7 @@ export function upcomingReminder(
       // ปุ่มเขียนว่า "ใกล้ฉัน" ต้องค้นหาให้เลย
       // location action เปิดได้แค่หน้าเลือกสถานที่ของ LINE ซึ่งไม่รับคำค้นของเรา
       // ผู้ใช้เลยเจอร้านอาหารแถวบ้านแทนที่จะเจอที่ว่าการอำเภอ
-      quick.push({ label: a.label, uri: mapsSearchUrl(a.searchTerm), icon: 'pin' });
+      quick.push({ label: a.label, uri: mapsSearchUrl(a.searchTerm, area?.lat, area?.lng), icon: 'pin' });
     }
   }
   // การ์ดรวมหลายใบ: ห้ามเดาว่าเขาต่อครบทุกใบ ให้เลือกทีละใบ

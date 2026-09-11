@@ -17,7 +17,7 @@ import { db } from '@/lib/db/client';
 import { push } from '@/lib/line/client';
 import { upcomingReminder, dueReminder, type ReminderItem } from '@/lib/line/messages';
 import { todayInBangkok } from '@/lib/domain/thaiDate';
-import { track } from '@/lib/db/repo';
+import { track, getUserArea } from '@/lib/db/repo';
 import { loadRenewActions } from '@/lib/domain/renewActions';
 
 interface QueueRow {
@@ -90,7 +90,10 @@ export async function runReminders() {
     try {
       if (bucket.upcoming.length) {
         const items = bucket.upcoming.map(toItem);
-        await push(userId, upcomingReminder(items, today, actionsByType));
+        // พิกัดหยาบที่เขาเคยแชร์ไว้ — ทำให้ลิงก์ "ใกล้ฉัน" ค้นรอบตัวเขาจริง ๆ
+        // ไม่มีก็ยังกดได้ แค่ Maps ใช้ตำแหน่งของเครื่องเป็นจุดตั้งต้นแทน
+        const area = await getUserArea(userId);
+        await push(userId, upcomingReminder(items, today, actionsByType, area));
         sentMessages++;
         ok.push(...bucket.upcoming.map((r) => r.id));
       }
