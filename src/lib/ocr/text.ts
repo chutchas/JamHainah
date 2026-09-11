@@ -13,7 +13,7 @@
 import OpenAI from 'openai';
 import { env } from '@/lib/env';
 import { DOC_TYPES } from '@/lib/domain/docTypes';
-import { formatThaiLong } from '@/lib/domain/thaiDate';
+import { formatThaiLong, parseThaiDateText } from '@/lib/domain/thaiDate';
 import type { ISODate } from '@/lib/domain/thaiDate';
 import type { Extraction } from './types';
 import { normalize } from './openai';
@@ -49,12 +49,15 @@ function system(today: ISODate): string {
    ปีที่มากกว่า 2400 ให้ลบ 543 ผลลัพธ์เป็น ค.ศ. เสมอ
 2. วันแบบพูด ("สิ้นเดือนนี้", "ปีหน้า", "อีก 3 เดือน") ให้คำนวณจากวันนี้
    "สิ้นเดือน" = วันสุดท้ายของเดือนนั้น
-3. บอกแค่เดือนกับปี ไม่บอกวัน ให้ใช้วันสุดท้ายของเดือน
+3. ปีสองหลักคือ พ.ศ. เสมอ — "73" = พ.ศ. 2573 = ค.ศ. 2030
+   ไม่ใช่ ค.ศ. 2073 และไม่ใช่ พ.ศ. 2473
+4. รูปแบบตัวเลขเป็น วัน/เดือน/ปี เสมอ — "23/7/73" = 23 กรกฎาคม พ.ศ. 2573
+5. บอกแค่เดือนกับปี ไม่บอกวัน ให้ใช้วันสุดท้ายของเดือน
    เพราะเอกสารหมดอายุสิ้นเดือนบ่อยกว่าต้นเดือน และเตือนเร็วไปดีกว่าเตือนช้าไป
-4. ไม่มีวันที่ในข้อความเลย ให้ expiryDate = null — ห้ามเดา
+6. ไม่มีวันที่ในข้อความเลย ให้ expiryDate = null — ห้ามเดา
    ระบบจะไปถามผู้ใช้เอง ซึ่งดีกว่าเดาผิดแล้วเขาเสียค่าปรับ
-5. ข้อความที่ไม่ได้พูดถึงเอกสาร (ทักทาย ถามราคา บ่น) ให้ isDocument = false
-6. ไม่ตรงกับประเภทที่รู้จัก ให้ docTypeKey = null ห้ามเดาให้ใกล้เคียง
+7. ข้อความที่ไม่ได้พูดถึงเอกสาร (ทักทาย ถามราคา บ่น) ให้ isDocument = false
+8. ไม่ตรงกับประเภทที่รู้จัก ให้ docTypeKey = null ห้ามเดาให้ใกล้เคียง
 
 ประเภทที่รู้จัก: ${TEXT_KEYS.join(', ')}`;
 }
@@ -79,7 +82,22 @@ export async function extractFromText(text: string, today: ISODate): Promise<Ext
 
   try {
     // normalize ตัวเดียวกับฝั่งรูป — ด่านสุดท้ายก่อนข้อมูลเข้าฐานต้องมีที่เดียว
-    return normalize(JSON.parse(content));
+    const out = normalize(JSON.parse(content));
+
+    /**
+     * กติกาตายตัวชนะโมเดลเสมอถ้ามันอ่านออก
+     *
+     * "23/7/73" มีคำตอบเดียว ไม่ต้องใช้ความเข้าใจภาษาอะไรเลย
+     * ส่วนโมเดลเคยตอบว่าไม่เจอวันที่ในข้อความนี้ และเคยตีเป็น ค.ศ. 2073
+     * เหลือให้มันทำเฉพาะเรื่องที่กติกาตายตัวทำไม่ได้ เช่น "สิ้นเดือนหน้า"
+     */
+    const exact = parseThaiDateText(text, today);
+    if (exact) {
+      out.expiryDate = exact;
+      out.isDocument = true;
+      out.confidence = Math.max(out.confidence, 0.9);
+    }
+    return out;
   } catch {
     return { isDocument: false, docTypeKey: null, label: null, expiryDate: null, confidence: 0 };
   }

@@ -284,8 +284,24 @@ async function onPostback(ev: Ev, userId: string) {
         await repo.updateDocument(targetDocId, { expiry_date: picked, confirmed_by_user: true, source: 'manual' });
         doc = await repo.getDocument(targetDocId);
       } else {
+        /**
+         * เลือกวันที่โดยยังไม่มีใบให้แก้ = กำลังสร้างใบใหม่
+         * จึงต้องเทียบกับของที่มีอยู่ก่อน เหมือนทางที่มาจากรูปทุกประการ
+         *
+         * ที่ผ่านมาทางนี้ข้ามการเทียบไป บัตรประชาชนซึ่งมีได้ใบเดียว
+         * จึงงอกใบที่สองได้ถ้าผู้ใช้เข้ามาทางปฏิทินแทนที่จะเป็นทางรูป
+         * — กติกาที่บังคับแค่บางทางเข้า คือกติกาที่ไม่มีอยู่จริง
+         */
+        const handledByDate = await handleExisting({
+          replyToken: ev.replyToken, userId, typeKey: key,
+          label: pending.label, expiryDate: picked, today,
+        });
+        if (handledByDate) {
+          await repo.setPending(userId, null);
+          return;
+        }
         doc = await repo.createDocument({
-          lineUserId: userId, docTypeKey: key, expiryDate: picked, confirmed: true, source: 'manual',
+          lineUserId: userId, docTypeKey: key, label: pending.label, expiryDate: picked, confirmed: true, source: 'manual',
         });
       }
       if (!doc) return reply(ev.replyToken, M.fallback());

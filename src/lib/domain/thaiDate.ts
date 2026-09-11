@@ -92,3 +92,82 @@ export function normalizeYear(year: number): number {
   if (year > 2400) return year - 543;   // พ.ศ.
   return year;                           // ค.ศ.
 }
+
+/**
+ * ปีสองหลักที่คนไทยพิมพ์ หมายถึงปีอะไร
+ *
+ * "73" คือ พ.ศ. 2573 = ค.ศ. 2030 ไม่ใช่ ค.ศ. 2073 และไม่ใช่ พ.ศ. 2473
+ * ระยะห่าง 543 ปีทำให้เดาถูกได้เกือบเสมอ เพราะมีคำตอบเดียวที่ตกอยู่ใน
+ * ช่วงที่เอกสารมีอายุจริง — เอกสารไม่หมดอายุเมื่อ 40 ปีก่อน และไม่หมดอายุอีก 60 ปีข้างหน้า
+ *
+ * ลองทุกความเป็นไปได้ แล้วเลือกอันที่อยู่ในช่วงที่เป็นไปได้จริง
+ */
+export function resolveYear(year: number, today: ISODate): number {
+  if (year >= 2400) return year - 543;
+  if (year >= 1900) return year;
+
+  const now = Number(today.slice(0, 4));
+  const candidates = [2500 + year - 543, 2600 + year - 543, 2000 + year];
+  const usable = candidates.filter((y) => y >= now - 2 && y <= now + 40);
+  // ไม่มีอันไหนเข้าเค้าเลย (เช่นเอกสารที่หมดอายุไปนานแล้ว) เอา พ.ศ. 25xx ไว้ก่อน
+  return usable.length ? Math.min(...usable) : 2500 + year - 543;
+}
+
+const THAI_MONTHS = [
+  ['ม.ค', 'มกรา'], ['ก.พ', 'กุมภา'], ['มี.ค', 'มีนา'], ['เม.ย', 'เมษา'],
+  ['พ.ค', 'พฤษภา'], ['มิ.ย', 'มิถุนา'], ['ก.ค', 'กรกฎา'], ['ส.ค', 'สิงหา'],
+  ['ก.ย', 'กันยา'], ['ต.ค', 'ตุลา'], ['พ.ย', 'พฤศจิกา'], ['ธ.ค', 'ธันวา'],
+];
+
+function buildISO(d: number, m: number, y: number): ISODate | null {
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const iso = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  // กันวันที่ไม่มีจริงอย่าง 31 ก.พ. — Date จะเลื่อนไปเดือนถัดไปเงียบ ๆ
+  const back = new Date(`${iso}T00:00:00Z`);
+  return back.getUTCDate() === d && back.getUTCMonth() + 1 === m ? (iso as ISODate) : null;
+}
+
+/**
+ * อ่านวันที่จากข้อความที่ผู้ใช้พิมพ์ — ทำเองก่อนถามโมเดล
+ *
+ * รูปแบบตัวเลขเป็นสิ่งที่กติกาตายตัวอ่านได้แม่นกว่าและเร็วกว่าโมเดลภาษา
+ * และไม่มีวันเปลี่ยนคำตอบเองในวันที่เราไม่ได้แก้อะไร
+ * เหลือให้โมเดลทำเฉพาะเรื่องที่กติกาตายตัวทำไม่ได้ เช่น "สิ้นเดือนหน้า"
+ *
+ * รองรับ: 23/7/73 · 23-07-2573 · 2573-07-23 · 23 ก.ค. 73 · 23 กรกฎาคม 2573
+ */
+export function parseThaiDateText(text: string, today: ISODate): ISODate | null {
+  const t = text.replace(/\u00A0/g, ' ');
+
+  // 2573-07-23 หรือ 2030-07-23
+  const iso = t.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (iso) {
+    const got = buildISO(Number(iso[3]), Number(iso[2]), resolveYear(Number(iso[1]), today));
+    if (got) return got;
+  }
+
+  // 23/7/73 · 23-7-2573 · 23.7.73 — คนไทยเขียน วัน/เดือน/ปี เสมอ
+  const dmy = t.match(/(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{2,4})/);
+  if (dmy) {
+    const got = buildISO(Number(dmy[1]), Number(dmy[2]), resolveYear(Number(dmy[3]), today));
+    if (got) return got;
+  }
+
+  /**
+   * 23 ก.ค. 73 · 23 กรกฎาคม 2573
+   *
+   * ช่วงอักษรต้องเป็น \u0E00-\u0E7F ทั้งบล็อก ไม่ใช่ [ก-ฮ]
+   * เพราะสระกับวรรณยุกต์อยู่นอกช่วงพยัญชนะ — "มิ.ย." จะไม่ match ถ้าใช้ [ก-ฮ]
+   */
+  const thai = t.match(/(\d{1,2})\s*([\u0E00-\u0E7F][\u0E00-\u0E7F.\s]*?)\s*(\d{2,4})/);
+  if (thai) {
+    const word = thai[2].replace(/\s/g, '');
+    const idx = THAI_MONTHS.findIndex(([abbr, full]) => word.startsWith(abbr) || word.startsWith(full));
+    if (idx >= 0) {
+      const got = buildISO(Number(thai[1]), idx + 1, resolveYear(Number(thai[3]), today));
+      if (got) return got;
+    }
+  }
+
+  return null;
+}
