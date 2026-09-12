@@ -28,7 +28,8 @@ interface Doc {
   id: string;
   /** ISO — ใช้เป็นค่าตั้งต้นของช่องแก้วันที่ */
   expiry: string;
-  emoji: string;
+  /** ไอคอนประเภทเอกสารของเราเอง ชุดเดียวกับในแชทและ rich menu */
+  icon: string;
   typeLabel: string;
   label: string | null;
   expiryThai: string;
@@ -50,6 +51,16 @@ declare global {
 
 const REVEAL = 88;  // ความกว้างปุ่มลบที่โผล่มาตอนปัดซ้าย
 const OPEN_AT = 44; // ปัดเกินเท่านี้ถือว่าตั้งใจ
+
+/**
+ * ไอคอนของปุ่มในถาด — ชุดเดียวกับที่ใช้ในชิปของแชท
+ * ป้ายในฐานข้อมูลไม่มี emoji แล้ว (migration 0010) ไอคอนจึงต้องมาจากฝั่งนี้
+ */
+const ACTION_ICON: Record<ActionKind, string> = {
+  upsell: '/icons/spark.png',
+  link: '/icons/globe.png',
+  map: '/icons/pin.png',
+};
 
 function mapUrl(term: string, lat?: number, lng?: number) {
   const q = `https://www.google.com/maps/search/${encodeURIComponent(term)}`;
@@ -376,7 +387,8 @@ export default function LiffPage() {
 
       {askArea && !selectMode && docs.length > 0 && (
         <div className="ask">
-          <span className="ask-t">📍 เปิดตำแหน่งไว้ เราจะได้แนะนำที่ใกล้คุณได้ตรงขึ้น</span>
+          <img src="/icons/pin.png" alt="" width={22} height={22} />
+          <span className="ask-t">เปิดตำแหน่งไว้ เราจะได้แนะนำที่ใกล้คุณได้ตรงขึ้น</span>
           <button className="link" onClick={requestArea} disabled={areaBusy}>
             {areaBusy ? 'กำลังอ่าน…' : 'เปิด'}
           </button>
@@ -421,7 +433,10 @@ export default function LiffPage() {
                   {selectMode && (
                     <span className={`box${selected.has(d.id) ? ' on' : ''}`} aria-hidden="true" />
                   )}
-                  <span className="nm">{d.emoji} {d.typeLabel}{d.label ? ` · ${d.label}` : ''}</span>
+                  <span className="nm">
+                    <img className="tico" src={d.icon} alt="" width={20} height={20} />
+                    {d.typeLabel}{d.label ? ` · ${d.label}` : ''}
+                  </span>
                   <span className="sb">หมดอายุ {d.expiryThai}</span>
                   <span className={`days ${d.status}`}>
                     {d.days < 0 ? `เลย ${Math.abs(d.days)} วัน` : d.days === 0 ? 'วันนี้' : `เหลือ ${d.days} วัน`}
@@ -440,7 +455,7 @@ export default function LiffPage() {
                         <span className="muted">จะเตือน {d.reminders.length} ครั้ง</span>
                         {d.reminders.map((r) => (
                           <span className="sched-r" key={r.thai}>
-                            <span>📅 {r.thai}</span>
+                            <span>{r.thai}</span>
                             <span className="muted">{r.when}</span>
                           </span>
                         ))}
@@ -480,10 +495,11 @@ export default function LiffPage() {
                           disabled={leadSent.has(d.id)}
                           onClick={() => requestLead(d)}
                         >
-                          {leadSent.has(d.id) ? '✓ รับเรื่องแล้ว เดี๋ยวทักไปในแชทครับ' : a.label}
+                          {leadSent.has(d.id) ? 'รับเรื่องแล้ว เดี๋ยวทักไปในแชทครับ' : a.label}
                         </button>
                       ) : (
                         <a key={a.label} className="act" href={a.url} target="_blank" rel="noreferrer">
+                          <img src={ACTION_ICON[a.kind]} alt="" width={18} height={18} />
                           {a.label}
                         </a>
                       )

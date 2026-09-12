@@ -104,7 +104,9 @@ html, body {
 }
 .doc.picking { grid-template-columns: auto 1fr auto; cursor: pointer; }
 
-.doc .nm { font-weight: 600; font-size: 14.5px; }
+.doc .nm { font-weight: 600; font-size: 14.5px; display: flex; align-items: center; gap: 7px; }
+/* ไอคอนประเภทเอกสาร ชุดเดียวกับในแชทและ rich menu */
+.doc .tico { flex: none; }
 .doc .sb { grid-column: auto; font-size: 12.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .doc:not(.picking) .nm { grid-column: 1; }
 .doc:not(.picking) .sb { grid-column: 1; }
@@ -160,7 +162,8 @@ html, body {
 }
 
 .act {
-  display: block; text-align: center; text-decoration: none;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  text-align: center; text-decoration: none;
   padding: 11px 12px; border-radius: 9px;
   border: 1px solid var(--line); background: var(--surface);
   color: var(--ink); font-size: 14px; font-weight: 500;

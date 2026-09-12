@@ -70,7 +70,11 @@ export async function GET(req: NextRequest) {
       const win = renewWindow(d.doc_type, d.expiry_date, today);
       return {
         id: d.id,
-        emoji: t.emoji,
+        /**
+         * ไอคอนของเราเอง ไม่ใช่ emoji ของระบบ
+         * emoji สีจัดจนแย่งสายตาไปจากตัวเลขวันหมดอายุ ซึ่งเป็นของสำคัญเพียงอย่างเดียวในแถว
+         */
+        icon: `/icons/doc/${d.doc_type}.png`,
         typeLabel: t.label,
         label: d.label,
         expiry: d.expiry_date,
