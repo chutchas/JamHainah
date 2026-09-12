@@ -97,7 +97,8 @@ test('ทุกชิปที่ตั้งไอคอนไว้ ต้อ�
   for (const msg of everyMessage()) {
     for (const it of quickItems(msg)) {
       if (it.imageUrl) {
-        assert.match(it.imageUrl, /^https:\/\/.+\/icons\/[a-z]+\.png$/);
+        // ไอคอนปุ่มอยู่ /icons/ ส่วนไอคอนประเภทเอกสารอยู่ /icons/doc/ และมี _ ในชื่อ
+        assert.match(it.imageUrl, /^https:\/\/.+\/icons\/(doc\/)?[a-z_]+\.png$/);
       }
     }
   }
