@@ -74,14 +74,37 @@ export function formatThaiLong(iso: ISODate): string {
   return `${d.getUTCDate()} ${TH_MONTH_FULL[d.getUTCMonth()]} ${d.getUTCFullYear() + 543}`;
 }
 
-/** "เหลือ 96 วัน" / "ครบกำหนดวันนี้" / "เลยมาแล้ว 3 วัน" */
+/**
+ * "เหลือ 96 วัน" / "ครบกำหนดวันนี้" / "เลยกำหนดมาแล้ว 3 วัน"
+ *
+ * เกินหนึ่งปีพูดเป็นปีกับเดือน เพราะ "เหลือ 395 วัน" ไม่มีใครแปลในหัวได้ทัน
+ * พาสปอร์ตกับบัตรประชาชนอายุ 5-10 ปี เลขวันจึงใหญ่จนไม่มีความหมาย
+ */
 export function humanRemaining(today: ISODate, expiry: ISODate): string {
   const n = daysBetween(today, expiry);
   if (n === 0) return 'ครบกำหนดวันนี้';
   if (n === 1) return 'เหลือ 1 วัน';
-  if (n > 1)  return `เหลือ ${n} วัน`;
+  if (n >= 365) {
+    const years = Math.floor(n / 365);
+    const months = Math.floor((n % 365) / 30);
+    return months > 0 ? `เหลือ ${years} ปี ${months} เดือน` : `เหลือ ${years} ปี`;
+  }
+  if (n > 1) return `เหลือ ${n} วัน`;
   if (n === -1) return 'เลยกำหนดเมื่อวาน';
   return `เลยกำหนดมาแล้ว ${Math.abs(n)} วัน`;
+}
+
+/**
+ * ค่าสำหรับคอลัมน์ขวาของแถว "เหลืออีก" — ตัดคำว่า "เหลือ" ที่ซ้ำกับป้ายซ้ายออก
+ * "เหลืออีก | เหลือ 30 วัน" อ่านสะดุดทุกครั้งที่ตากวาดผ่าน
+ */
+export function remainingValue(today: ISODate, expiry: ISODate): string {
+  return humanRemaining(today, expiry).replace(/^เหลือ /, '');
+}
+
+/** ใกล้พอที่จะต้องทำอะไรแล้ว — ใช้ตัดสินว่าตัวเลขในการ์ดควรเป็นสีเตือนไหม */
+export function isUrgent(today: ISODate, expiry: ISODate): boolean {
+  return daysBetween(today, expiry) <= 30;
 }
 
 /**

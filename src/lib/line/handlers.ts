@@ -375,7 +375,9 @@ async function onPostback(ev: Ev, userId: string) {
 
       // การ์ดที่ส่งไปแล้วแก้ไม่ได้ ปุ่มจึงกดซ้ำได้เสมอ — กันที่นี่แทน
       if (doc.confirmed_by_user) {
-        return reply(ev.replyToken, M.alreadyConfirmed(doc.doc_type, doc.label, doc.expiry_date));
+        return reply(ev.replyToken, M.alreadyConfirmed({
+          documentId: doc.id, typeKey: doc.doc_type, label: doc.label, expiry: doc.expiry_date, today,
+        }));
       }
 
       await repo.updateDocument(doc.id, { confirmed_by_user: true });
@@ -689,7 +691,9 @@ async function handleExisting(args: {
   if (kind === 'duplicate') {
     await repo.setPending(args.userId, null);
     await repo.track('duplicate_skipped', args.userId, { typeKey: args.typeKey });
-    await reply(args.replyToken, M.alreadyHave(doc.doc_type, doc.label, doc.expiry_date));
+    await reply(args.replyToken, M.alreadyHave({
+      documentId: doc.id, typeKey: doc.doc_type, label: doc.label, expiry: doc.expiry_date, today: args.today,
+    }));
     return true;
   }
 

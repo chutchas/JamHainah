@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   addDays, addMonths, daysBetween, formatThai, humanRemaining,
-  isISODate, normalizeYear, todayInBangkok, parseThaiDateText, resolveYear,
+  isISODate, isUrgent, normalizeYear, remainingValue, todayInBangkok, parseThaiDateText, resolveYear,
 } from '../src/lib/domain/thaiDate';
 
 test('formatThai แปลงเป็น พ.ศ. เสมอ', () => {
@@ -47,6 +47,25 @@ test('humanRemaining อ่านเป็นภาษาคน', () => {
   assert.equal(humanRemaining('2026-09-10', '2026-09-10'), 'ครบกำหนดวันนี้');
   assert.equal(humanRemaining('2026-09-10', '2026-12-15'), 'เหลือ 96 วัน');
   assert.equal(humanRemaining('2026-09-10', '2026-09-09'), 'เลยกำหนดเมื่อวาน');
+  // เอกสารอายุหลายปี (พาสปอร์ต บัตรประชาชน) — เลขวันใหญ่จนแปลในหัวไม่ทัน
+  assert.equal(humanRemaining('2026-09-10', '2027-10-12'), 'เหลือ 1 ปี 1 เดือน');
+  assert.equal(humanRemaining('2026-09-10', '2036-09-10'), 'เหลือ 10 ปี');
+});
+
+test('remainingValue ไม่พูดคำว่า "เหลือ" ซ้ำกับป้ายซ้ายของแถว', () => {
+  // ในการ์ดป้ายซ้ายคือ "เหลืออีก" อยู่แล้ว — "เหลืออีก | เหลือ 96 วัน" อ่านสะดุด
+  assert.equal(remainingValue('2026-09-10', '2026-12-15'), '96 วัน');
+  assert.equal(remainingValue('2026-09-10', '2027-10-12'), '1 ปี 1 เดือน');
+  // ฝั่งที่เลยกำหนดต้องคงประโยคเต็มไว้ ไม่ใช่เหลือแค่ตัวเลข
+  assert.equal(remainingValue('2026-09-10', '2026-09-09'), 'เลยกำหนดเมื่อวาน');
+  assert.equal(remainingValue('2026-09-10', '2026-09-10'), 'ครบกำหนดวันนี้');
+});
+
+test('isUrgent ร้อนเฉพาะ 30 วันสุดท้าย', () => {
+  // สีแดงกับของที่เหลืออีกปีกว่า ทำให้สีแดงไม่มีความหมายเมื่อถึงเวลาที่ควรร้อนจริง
+  assert.equal(isUrgent('2026-09-10', '2026-10-10'), true);
+  assert.equal(isUrgent('2026-09-10', '2026-10-11'), false);
+  assert.equal(isUrgent('2026-09-10', '2026-09-09'), true);
 });
 
 /* ---------------- วันที่ที่ผู้ใช้พิมพ์เอง ---------------- */

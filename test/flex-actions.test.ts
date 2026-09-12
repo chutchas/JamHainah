@@ -32,8 +32,8 @@ function everyMessage(): M.LineMessage[] {
   return [
     ...M.greeting(),
     ...M.confirmExtracted({ documentId: 'd1', typeKey: 'vehicle_tax', label: '1กก 1234', expiry: '2026-12-15', today: '2026-11-15' }),
-    ...M.alreadyHave('vehicle_tax', '1กก 1234', '2026-12-15'),
-    ...M.alreadyConfirmed('vehicle_tax', '1กก 1234', '2026-12-15'),
+    ...M.alreadyHave({ documentId: 'd1', typeKey: 'vehicle_tax', label: '1กก 1234', expiry: '2026-12-15', today: '2026-11-15' }),
+    ...M.alreadyConfirmed({ documentId: 'd1', typeKey: 'vehicle_tax', label: '1กก 1234', expiry: '2026-12-15', today: '2026-11-15' }),
     ...M.askRenewalOrNew({ existingId: 'd1', typeKey: 'vehicle_tax', existingLabel: '1กก 1234', existingExpiry: '2026-01-01', newExpiry: '2026-12-15', reason: 'unclear_gap' }),
     ...M.askRenewalOrNew({ existingId: 'd1', typeKey: 'vehicle_tax', existingLabel: null, existingExpiry: '2026-01-01', newExpiry: '2026-12-15', reason: 'no_label' }),
     ...M.askDate({ documentId: 'd1', reason: 'edit' }),
@@ -177,7 +177,37 @@ test('ต่อเองแล้ว ต้องบอกรอบเตือ�
       { send_on: '2027-12-08', offset_days: -7 },
     ],
   }) as any[];
-  assert.match(msg.text, /ผมจะเตือนคุณ 3 ครั้ง/);
+  assert.match(JSON.stringify(msg), /จะเตือน 3 ครั้ง/);
+});
+
+/**
+ * กติกาที่แยกว่าอะไรควรเป็นการ์ด อะไรควรเป็นข้อความ
+ *
+ * มีวันที่ในข้อความ = มันคือข้อมูลที่เขาต้องตรวจหรือย้อนมาดู ต้องอยู่ในการ์ด
+ * เพราะข้อความล้วนจัดคอลัมน์ไม่ได้ ต้องใช้ขีดคั่นแทน แล้วอ่านยากขึ้นทุกบรรทัด
+ * ส่วนประโยคสนทนาต้องเป็นข้อความ เพราะ notification บนหน้า lock screen
+ * แสดงข้อความเต็ม แต่การ์ดแสดงได้แค่ altText — คนอ่านจากตรงนั้นเป็นส่วนใหญ่
+ */
+test('ข้อความธรรมดาต้องไม่มีวันที่อยู่ในนั้น', () => {
+  const THAI_DATE = /\d{1,2} (ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.) 2\d{3}/;
+  for (const msg of everyMessage()) {
+    const m = msg as any;
+    if (m.type !== 'text') continue;
+    assert.ok(!THAI_DATE.test(m.text), `ข้อความนี้มีวันที่ ควรเป็นการ์ด:\n${m.text}`);
+  }
+});
+
+/**
+ * emoji ถูกวาดโดยระบบปฏิบัติการ ไม่ใช่โดยเรา — ตัวเดียวกันหน้าตาคนละอย่าง
+ * บน iPhone กับ Android และบางตัวกลายเป็นกล่องสีเทาบนเครื่องเก่า
+ * เรามีไอคอนของตัวเองแล้วทั้งชุด (public/icons) จึงไม่มีเหตุผลให้ยืม emoji มาใช้
+ */
+test('ไม่มี emoji ของระบบในทุกข้อความ', () => {
+  const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
+  for (const msg of everyMessage()) {
+    const found = JSON.stringify(msg).match(EMOJI);
+    assert.ok(!found, `เจอ emoji ${found?.[0]} ใน: ${JSON.stringify(msg).slice(0, 160)}`);
+  }
 });
 
 test('มีการ์ดเตือนด่วนต่อท้าย ต้องไม่ชวนคุยเรื่องเอกสารอื่น', () => {
