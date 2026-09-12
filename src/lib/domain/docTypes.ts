@@ -125,11 +125,11 @@ export function isKnownDocType(key: string): boolean {
  */
 export const SUGGEST_BY_GROUP: Record<DocGroup, { prompt: string; keys: string[] }> = {
   vehicle: {
-    prompt: 'มีอีกไหมครับ รถคันเดียวมักมีหลายใบ',
+    prompt: 'รถคันนี้มีใบอื่นอีกไหมครับ',
     keys: ['cmi', 'vehicle_tax', 'motor_insurance', 'vehicle_inspection'],
   },
   identity: {
-    prompt: 'มีอีกไหมครับ เอกสารประจำตัวมักหมดอายุไล่ ๆ กัน',
+    prompt: 'มีเอกสารที่หมดอายุไล่ ๆ กันไหมครับ',
     keys: ['national_id', 'driving_license', 'passport', 'visa'],
   },
   insurance: {
@@ -137,7 +137,7 @@ export const SUGGEST_BY_GROUP: Record<DocGroup, { prompt: string; keys: string[]
     keys: ['health_insurance', 'life_insurance', 'motor_insurance', 'social_security'],
   },
   other: {
-    prompt: 'มีเอกสารอื่นที่อยากให้ผมจำอีกไหมครับ',
+    prompt: 'มีเอกสารอื่นอีกไหมครับ',
     keys: ['vehicle_tax', 'national_id', 'passport', 'custom'],
   },
 };

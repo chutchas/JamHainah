@@ -386,7 +386,7 @@ async function onPostback(ev: Ev, userId: string) {
       const urgent = await inlineDueToday({ userId, today, queued: rows, doc });
       return reply(ev.replyToken, [
         ...M.savedAndSuggestMore({
-          typeKey: doc.doc_type, reminderDates: rows, docCount: count, today,
+          typeKey: doc.doc_type, label: doc.label, reminderDates: rows, docCount: count, today,
           expiry: doc.expiry_date, ownedTypeKeys: owned,
         }),
         ...urgent,
@@ -446,7 +446,7 @@ async function onPostback(ev: Ev, userId: string) {
       const urgentNow = await inlineDueToday({ userId, today, queued: rows, doc });
       return reply(ev.replyToken, [
         ...M.savedAndSuggestMore({
-          typeKey: doc.doc_type, reminderDates: rows, docCount: count, today,
+          typeKey: doc.doc_type, label: doc.label, reminderDates: rows, docCount: count, today,
           expiry: doc.expiry_date, ownedTypeKeys: ownedNow,
         }),
         ...urgentNow,

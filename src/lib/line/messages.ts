@@ -201,6 +201,11 @@ function bubble(
   return { type: 'flex', altText, contents };
 }
 
+/** การ์ดเปล่า ๆ ที่มีแต่เนื้อ — ปุ่มทั้งหมดอยู่ที่ quick reply อยู่แล้ว */
+function flexCard(body: LineMessage[], altText: string): LineMessage {
+  return bubble(body, undefined, altText);
+}
+
 /**
  * หัวการ์ด: มาสคอตยืนอยู่ข้างชื่อเรื่อง
  *
@@ -627,6 +632,7 @@ function reminderLines(rows: Array<{ send_on: ISODate; offset_days: number }>, t
 
 export function savedAndSuggestMore(args: {
   typeKey: string;
+  label?: string | null;
   reminderDates: Array<{ send_on: ISODate; offset_days: number }>;
   docCount: number;
   today: ISODate;
@@ -643,80 +649,116 @@ export function savedAndSuggestMore(args: {
   const sentNow = upcoming.filter((r) => r.send_on <= args.today);
   const future = upcoming.filter((r) => r.send_on > args.today);
 
-  const lines = reminderLines(future, args.today);
+  const body: LineMessage[] = [
+    headRow('บันทึกแล้วครับ', '13-thumbsup'),
+  ];
 
-  // ทวนสิ่งที่บันทึกไปเสมอ ผู้ใช้เพิ่งเลือกวันที่มา ต้องเห็นว่าระบบรับไปถูก
-  const summary = args.expiry
-    ? `หมดอายุ ${formatThai(args.expiry)} (${humanRemaining(args.today, args.expiry)})\n\n`
-    : '';
-
-  let head: string;
-  if (sentNow.length > 0) {
-    // ใกล้ครบกำหนดจนต้องบอกเดี๋ยวนี้ — การ์ดเตือนต่อท้ายข้อความนี้เลย
-    head =
-      `บันทึกแล้วครับ ✅\n${summary}` +
-      `ใกล้ครบกำหนดแล้ว ผมบอกรายละเอียดไว้ข้างล่างเลยครับ 👇` +
-      (lines.length > 0 ? `\n\nแล้วจะเตือนอีก ${lines.length} ครั้ง\n${lines.join('\n')}` : '');
-  } else if (lines.length > 0) {
-    head = `บันทึกแล้วครับ ✅\n${summary}ผมจะเตือนคุณ ${lines.length} ครั้ง\n${lines.join('\n')}\n\nลืมได้เลยครับ ผมจำให้แล้ว`;
-  } else {
-    head = `บันทึกแล้วครับ ✅\n${summary}ผมจะเตือนเมื่อใกล้ครบกำหนดครับ`;
+  // ทวนสิ่งที่บันทึกไปเสมอ ผู้ใช้เพิ่งส่งรูปหรือเพิ่งเลือกวันมา ต้องเห็นว่าระบบรับไปถูก
+  if (args.expiry) {
+    body.push(
+      { type: 'separator', margin: 'md' },
+      {
+        type: 'box', layout: 'vertical', spacing: 'sm', margin: 'md',
+        contents: [
+          docRow(args.typeKey, args.label, 'md'),
+          row('หมดอายุ', formatThai(args.expiry)),
+          row('เหลืออีก', humanRemaining(args.today, args.expiry), true),
+        ],
+      }
+    );
   }
 
-  const out: LineMessage[] = [text(head)];
+  /**
+   * รอบเตือนเป็นตารางสองคอลัมน์ ไม่ใช่บรรทัดข้อความติดกัน
+   * วันที่อยู่ซ้าย เหตุผลอยู่ขวา ตากวาดลงมาแล้วเทียบกันได้ทันที
+   * ในข้อความล้วนทำแบบนี้ไม่ได้ ต้องใช้ขีดคั่น ซึ่งอ่านยากกว่ามาก
+   */
+  if (future.length > 0) {
+    body.push(
+      { type: 'separator', margin: 'md' },
+      {
+        type: 'box', layout: 'vertical', spacing: 'sm', margin: 'md',
+        contents: [
+          { type: 'text', text: `จะเตือน ${future.length} ครั้ง`, size: 'xs', color: MUTED },
+          ...future.map((r) => ({
+            type: 'box', layout: 'horizontal',
+            contents: [
+              { type: 'text', text: formatThai(r.send_on), size: 'sm', flex: 3 },
+              {
+                type: 'text', size: 'xs', color: MUTED, align: 'end', flex: 3,
+                text: r.offset_days <= -60 ? 'วันแรกที่ต่อได้' : `เหลือ ${Math.abs(r.offset_days)} วัน`,
+              },
+            ],
+          })),
+        ],
+      }
+    );
+  }
 
   /**
-   * มีการ์ดเตือนด่วนต่อท้ายข้อความนี้ — หยุดแค่นี้
+   * มีการ์ดเตือนด่วนต่อท้าย — ปิดท้ายด้วยการชี้ลงไปข้างล่าง แล้วจบ
    *
-   * สองเหตุผล
-   *   1. ผู้ใช้กำลังโฟกัสของที่ใกล้หมดอายุ ชวนคุยเรื่องเอกสารอื่นตอนนี้คือขัดจังหวะ
+   * สองเหตุผลที่ไม่ชวนเพิ่มเอกสารตอนนี้
+   *   1. ผู้ใช้กำลังโฟกัสของที่ใกล้หมดอายุ ชวนคุยเรื่องอื่นคือขัดจังหวะ
    *   2. LINE แสดง quickReply ของ "ข้อความสุดท้าย" เท่านั้น
    *      ถ้าเอาชิปชวนเพิ่มมาแทรก ปุ่มของการ์ดเตือนจะหายไปทั้งหมด
    */
-  if (sentNow.length > 0) return out;
+  if (sentNow.length > 0) {
+    body.push(
+      { type: 'separator', margin: 'md' },
+      { type: 'text', margin: 'md', size: 'sm', wrap: true, weight: 'bold', color: WARN,
+        text: 'ใกล้ครบกำหนดแล้ว ดูรายละเอียดข้างล่างครับ' }
+    );
+    return [flexCard(body, `บันทึกแล้ว — ${plainName(args.typeKey, args.label)}`)];
+  }
 
   if (args.docCount >= 3) {
     // ฉาก 04 — สัญญาว่าจะเงียบ
     const next = future[0];
-    out.push(
-      text(
-        `เยี่ยมครับ ตอนนี้ผมดูให้ ${args.docCount} รายการ 🎉\n\n` +
-          (next ? `ครั้งต่อไปที่คุณจะได้ยินจากผม\nคือ ${formatThai(next.send_on)}\n\n` : '') +
-          'ระหว่างนี้ผมจะเงียบครับ 🤫',
-        chips([{ label: LIST_NAME, liff: true, icon: 'doc' }])
-      )
+    body.push(
+      { type: 'separator', margin: 'md' },
+      { type: 'text', margin: 'md', size: 'sm', wrap: true,
+        text: `ตอนนี้ผมดูให้ ${args.docCount} รายการแล้ว` },
+      { type: 'text', size: 'xs', color: MUTED, wrap: true,
+        text: next
+          ? `ครั้งต่อไปที่จะได้ยินจากผมคือ ${formatThai(next.send_on)} ระหว่างนี้ผมเงียบครับ`
+          : 'ระหว่างนี้ผมเงียบครับ' }
     );
-  } else {
-    // ชวนเพิ่มให้เข้ากับสิ่งที่เพิ่งบันทึก — บันทึกบัตรประชาชนแล้วพูดเรื่องรถ คนจะงง
-    const group = SUGGEST_BY_GROUP[docType(args.typeKey).group];
-    const owned = new Set(args.ownedTypeKeys ?? []);
-    const suggest = group.keys
-      .filter((k) => k !== args.typeKey)
-      // อย่าชวนเพิ่มบัตรประชาชนถ้าเขามีแล้ว — คนหนึ่งมีได้ใบเดียว
-      .filter((k) => !(owned.has(k) && docType(k).singleton))
-      .slice(0, 3)
-      .map(docType);
-    out.push(
-      text(
-        group.prompt,
-        /**
-         * ชิปชวนเพิ่มเปิดกล้องเลย ไม่ต้องผ่านเซิร์ฟเวอร์ก่อน
-         *
-         * เดิมเป็น postback: กด → เด้งข้อความ "🛡 พ.ร.บ." ขึ้นในแชท → เราตอบกลับ
-         * ให้ถ่ายรูป → เขาค่อยกดกล้อง สามจังหวะเพื่อทำเรื่องเดียว
-         * แล้วสิ่งที่ได้จากการรู้ประเภทล่วงหน้าก็แทบไม่มี — OCR อ่านเองอยู่แล้ว
-         * และถ้าอ่านไม่ออกค่อยถาม (askType) ซึ่งนาน ๆ ที
-         *
-         * ป้ายจึงกลายเป็นแค่คำใบ้ว่าควรถ่ายอะไร ไม่ใช่คำตอบที่ต้องส่งกลับมา
-         */
-        chips([
-          ...suggest.map((t): Chip => ({ label: t.label, camera: true, imageUrl: docIcon(t.key) })),
-          { label: 'ยังก่อน', data: pb('later'), icon: 'bell' },
-        ])
-      )
-    );
+    const card = flexCard(body, `บันทึกแล้ว — ดูให้ ${args.docCount} รายการ`);
+    card.quickReply = chips([{ label: LIST_NAME, liff: true, icon: 'doc' }]);
+    return [card];
   }
-  return out;
+
+  // ชวนเพิ่มให้เข้ากับสิ่งที่เพิ่งบันทึก — บันทึกบัตรประชาชนแล้วพูดเรื่องรถ คนจะงง
+  const group = SUGGEST_BY_GROUP[docType(args.typeKey).group];
+  const owned = new Set(args.ownedTypeKeys ?? []);
+  const suggest = group.keys
+    .filter((k) => k !== args.typeKey)
+    // อย่าชวนเพิ่มบัตรประชาชนถ้าเขามีแล้ว — คนหนึ่งมีได้ใบเดียว
+    .filter((k) => !(owned.has(k) && docType(k).singleton))
+    .slice(0, 3)
+    .map(docType);
+
+  body.push(
+    { type: 'separator', margin: 'md' },
+    { type: 'text', margin: 'md', size: 'sm', wrap: true, text: 'ลืมได้เลยครับ ผมจำให้แล้ว' },
+    { type: 'text', size: 'sm', wrap: true, color: TEAL, weight: 'bold', text: group.prompt }
+  );
+
+  const card = flexCard(body, `บันทึกแล้ว — ${plainName(args.typeKey, args.label)}`);
+  /**
+   * ชิปชวนเพิ่มเปิดกล้องเลย ไม่ต้องผ่านเซิร์ฟเวอร์ก่อน
+   *
+   * เดิมเป็น postback: กด → เด้งชื่อประเภทขึ้นในแชท → เราตอบให้ถ่ายรูป
+   * → เขาค่อยกดกล้อง สามจังหวะเพื่อทำเรื่องเดียว
+   * แล้วสิ่งที่ได้จากการรู้ประเภทล่วงหน้าก็แทบไม่มี — OCR อ่านเองอยู่แล้ว
+   * ป้ายจึงเป็นแค่คำใบ้ว่าควรถ่ายอะไร ไม่ใช่คำตอบที่ต้องส่งกลับมา
+   */
+  card.quickReply = chips([
+    ...suggest.map((t): Chip => ({ label: t.label, camera: true, imageUrl: docIcon(t.key) })),
+    { label: 'ยังก่อน', data: pb('later'), icon: 'bell' },
+  ]);
+  return [card];
 }
 
 /* ============================================================

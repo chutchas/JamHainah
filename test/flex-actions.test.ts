@@ -178,20 +178,36 @@ test('ต่อเองแล้ว ต้องบอกรอบเตือ�
 });
 
 test('มีการ์ดเตือนด่วนต่อท้าย ต้องไม่ชวนคุยเรื่องเอกสารอื่น', () => {
-  // ชิปของข้อความสุดท้ายเท่านั้นที่ LINE แสดง — ถ้าแทรกข้อความชวนเพิ่ม ปุ่มของการ์ดเตือนจะหาย
-  const withUrgent = M.savedAndSuggestMore({
+  // ชิปของข้อความสุดท้ายเท่านั้นที่ LINE แสดง
+  // ถ้าการ์ด "บันทึกแล้ว" มีชิปของตัวเอง ปุ่มของการ์ดเตือนที่ตามมาจะหายไปหมด
+  const [urgentCard] = M.savedAndSuggestMore({
     typeKey: 'national_id',
     reminderDates: [{ send_on: '2026-11-15', offset_days: -5 }],
     docCount: 1, today: '2026-11-15', expiry: '2026-11-20', ownedTypeKeys: ['national_id'],
-  });
-  assert.equal(withUrgent.length, 1);
+  }) as any[];
+  assert.equal(quickItems(urgentCard).length, 0, 'ต้องไม่มีชิปเลย');
 
-  const normal = M.savedAndSuggestMore({
+  const [normal] = M.savedAndSuggestMore({
     typeKey: 'national_id',
     reminderDates: [{ send_on: '2026-12-01', offset_days: -30 }],
     docCount: 1, today: '2026-11-15', expiry: '2026-12-31', ownedTypeKeys: ['national_id'],
-  });
-  assert.ok(normal.length > 1);
+  }) as any[];
+  assert.ok(quickItems(normal).length > 1, 'เคสปกติต้องมีชิปชวนเพิ่ม');
+});
+
+test('บันทึกแล้ว ต้องเป็นการ์ดเดียว ไม่ใช่สองฟอง', () => {
+  // สองฟองที่พูดเรื่องเดียวกันไม่ได้อ่านง่ายขึ้น แค่ยาวขึ้น
+  // และถ้ามีข้อความอื่นแทรก มันจะถูกแยกจากกันจนไม่รู้ว่าพูดถึงใบไหน
+  const msgs = M.savedAndSuggestMore({
+    typeKey: 'vehicle_tax', label: '1กก 1234',
+    reminderDates: [
+      { send_on: '2026-12-01', offset_days: -90 },
+      { send_on: '2027-01-15', offset_days: -30 },
+    ],
+    docCount: 1, today: '2026-11-15', expiry: '2027-02-14', ownedTypeKeys: [],
+  }) as any[];
+  assert.equal(msgs.length, 1);
+  assert.equal(msgs[0].type, 'flex');
 });
 
 test('ส่งรูปหลายใบ ต้องตอบครั้งเดียว ปุ่มชุดเดียวคุมทั้งหมด', () => {
