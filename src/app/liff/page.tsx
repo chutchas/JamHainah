@@ -56,6 +56,22 @@ function mapUrl(term: string, lat?: number, lng?: number) {
   return lat != null && lng != null ? `${q}/@${lat},${lng},14z` : q;
 }
 
+/** กรอบหน้าเดียวกันสำหรับตอนโหลดและตอนพัง — ไม่ให้ผู้ใช้เห็นหน้าขาวเปล่าที่ไม่รู้ว่าของใคร */
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="wrap">
+      <header className="hero">
+        <div className="hero-img" role="presentation" />
+        <div className="hero-bar">
+          <img className="logo" src="/brand/logo.png" alt="" width={44} height={44} />
+          <h1>เอกสารของฉัน</h1>
+        </div>
+      </header>
+      {children}
+    </div>
+  );
+}
+
 export default function LiffPage() {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [docs, setDocs] = useState<Doc[]>([]);
@@ -330,24 +346,33 @@ export default function LiffPage() {
     });
   }
 
-  if (state === 'loading') return <div className="wrap"><p className="muted">กำลังโหลด…</p></div>;
-  if (state === 'error') return <div className="wrap"><p className="muted">{message}</p></div>;
+  if (state === 'loading') return <Shell><p className="muted">กำลังโหลด…</p></Shell>;
+  if (state === 'error') return <Shell><p className="muted">{message}</p></Shell>;
 
   const allSelected = docs.length > 0 && selected.size === docs.length;
 
   return (
     <div className="wrap" onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
-      <div className="head">
-        <h1>📄 เอกสารของฉัน</h1>
-        {docs.length > 0 && (
-          <button
-            className="link"
-            onClick={() => { setSelectMode((v) => !v); setSelected(new Set()); setOpenId(null); setTrayId(null); }}
-          >
-            {selectMode ? 'ยกเลิก' : '☑︎ เลือก'}
-          </button>
-        )}
-      </div>
+      {/*
+        หัวหน้าเว็บใช้ปกกับโลโก้ชุดเดียวกับ LINE OA
+        หน้านี้เปิดจากในแอป LINE ซึ่งไม่มีแถบที่อยู่เว็บให้ดู
+        ถ้าไม่มีอะไรบอกว่ายังอยู่กับ "จำให้นะ" คนจะไม่แน่ใจว่าหลุดไปเว็บไหนแล้ว
+      */}
+      <header className="hero">
+        <div className="hero-img" role="presentation" />
+        <div className="hero-bar">
+          <img className="logo" src="/brand/logo.png" alt="" width={44} height={44} />
+          <h1>เอกสารของฉัน</h1>
+          {docs.length > 0 && (
+            <button
+              className="link"
+              onClick={() => { setSelectMode((v) => !v); setSelected(new Set()); setOpenId(null); setTrayId(null); }}
+            >
+              {selectMode ? 'ยกเลิก' : '☑︎ เลือก'}
+            </button>
+          )}
+        </div>
+      </header>
 
       {askArea && !selectMode && docs.length > 0 && (
         <div className="ask">
