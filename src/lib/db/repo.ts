@@ -27,6 +27,7 @@ export interface DocumentRow {
   meta: Record<string, unknown>;
   renewed_count: number;
   archived_at: string | null;
+  created_at: string;
 }
 
 export interface PendingState {
@@ -247,6 +248,43 @@ export async function listDocuments(lineUserId: string): Promise<DocumentRow[]> 
  * ไม่ส่ง id ไปกับปุ่ม เพราะ postback data ยาวได้ 300 ตัวอักษร
  * uuid สิบใบก็เกินแล้ว และถ้าเกินมันจะเงียบไปเฉย ๆ ไม่มี error ให้เห็น
  */
+/**
+ * ใบที่ "อยู่ในชุดเดียวกัน" กับใบล่าสุด และยังไม่ได้กดถูกต้อง
+ *
+ * ทำไมต้องยึดจากใบล่าสุด ไม่ใช่จากเวลาปัจจุบัน:
+ *   ปุ่มถูกสร้างตอนตอบ แต่ถูกกดทีหลัง — บางทีอีกห้านาที
+ *   ถ้าคิดจาก now() ปุ่ม "ถูกต้องทั้งหมด" จะหาใบไม่เจอแล้วกลายเป็นปุ่มที่กดแล้วไม่เกิดอะไร
+ *   ยึดจาก created_at ของใบล่าสุด ผลลัพธ์จึงเท่าเดิมไม่ว่าจะกดเมื่อไหร่
+ *
+ * ทำไมต้องจำกัดช่วงเวลาและจำนวน:
+ *   ใบที่ค้างไม่ยืนยันจากเมื่อเดือนที่แล้วไม่ควรโผล่มาปนกับรูปที่เพิ่งส่ง
+ *   และ quick reply ของ LINE ใส่ได้ 13 ปุ่ม — 4 ใบคือ 10 ปุ่มพอดี
+ */
+export async function recentUnconfirmed(
+  lineUserId: string,
+  withinSeconds = 60,
+  limit = 4
+): Promise<DocumentRow[]> {
+  const { data } = await db()
+    .from('documents')
+    .select('*')
+    .eq('line_user_id', lineUserId)
+    .eq('confirmed_by_user', false)
+    .is('archived_at', null)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  const rows = (data as DocumentRow[]) ?? [];
+  if (rows.length === 0) return [];
+
+  const newest = Date.parse(rows[0].created_at);
+  return rows
+    .filter((r) => newest - Date.parse(r.created_at) <= withinSeconds * 1000)
+    .slice(0, limit)
+    // เรียงเก่าไปใหม่ ให้ตรงลำดับการ์ดที่เขาเห็นในแชท
+    .reverse();
+}
+
 export async function listUnconfirmed(lineUserId: string): Promise<DocumentRow[]> {
   const { data } = await db()
     .from('documents')

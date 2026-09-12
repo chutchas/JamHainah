@@ -114,61 +114,21 @@ test('ชิปต่อข้อความต้องไม่เกิน 1
 });
 
 /**
- * ปุ่มเกือบทั้งหมดอยู่ที่ quick reply
+ * ปุ่มทั้งหมดย้ายมาอยู่ที่ quick reply แล้ว
  *
  * ไม่ใช่แค่เรื่องไอคอน — การ์ดเก่าค้างอยู่ในแชทตลอดกาล
  * ผู้ใช้เลื่อนขึ้นไปกดปุ่มของเมื่อเดือนที่แล้วได้ ส่วน quick reply หายไปเอง
- *
- * ข้อยกเว้นเดียวคือการ์ดยืนยันที่อ่านได้ ซึ่งปุ่มผูกกับเอกสารใบนั้นโดยตรง
- * (เหตุผลอยู่ใน extractedBubble) — ที่อื่นห้ามมีปุ่มใน Flex เด็ดขาด
  */
-test('ปุ่มใน Flex มีได้เฉพาะการ์ดยืนยัน และต้องเป็นปุ่มของใบนั้นเอง', () => {
-  const ALLOWED = new Set(['ถูกต้อง', 'แก้วันที่']);
+test('การ์ด Flex ต้องไม่มีปุ่มเหลืออยู่แล้ว', () => {
   const found: string[] = [];
   const walk = (n: any, path = '$') => {
     if (Array.isArray(n)) return n.forEach((x, i) => walk(x, `${path}[${i}]`));
     if (!n || typeof n !== 'object') return;
-    if (n.type === 'button' && !ALLOWED.has(n.action?.label)) found.push(`${path} → ${n.action?.label}`);
+    if (n.type === 'button') found.push(`${path} → ${n.action?.label}`);
     for (const [k, v] of Object.entries(n)) if (k !== 'quickReply') walk(v, `${path}.${k}`);
   };
   everyMessage().forEach((m) => walk(m));
   assert.deepEqual(found, []);
-});
-
-/**
- * บั๊กจริง: ส่งรูปสองใบแล้วยืนยันได้ใบเดียว
- *
- * LINE แสดง quick reply ของข้อความสุดท้ายเท่านั้น และรูปสองใบไม่ได้มาถึง
- * ในคำขอเดียวเสมอไป — เราจึงตอบใบแรกไปก่อนจะรู้ว่ามีใบที่สอง พอใบที่สองมา
- * ปุ่มของใบแรกหายไปทั้งชุด ผู้ใช้กด "ถูกต้อง" ได้ครั้งเดียว และมันไปเข้าใบล่างสุด
- *
- * ปุ่มที่ผูกกับเอกสารใบไหน ต้องอยู่ในการ์ดของใบนั้น และต้องชี้ไปที่ id ของใบนั้น
- */
-test('ทุกการ์ดยืนยันมีปุ่มของตัวเอง ชี้ไปที่เอกสารใบของตัวเอง', () => {
-  const docs = [
-    { documentId: 'aaa', typeKey: 'driving_license', label: null, expiry: '2030-07-23' },
-    { documentId: 'bbb', typeKey: 'national_id', label: null, expiry: '2030-07-22' },
-  ];
-  const msgs = M.confirmExtractedMany(docs, '2026-11-15') as any[];
-  const carousel = msgs.find((m) => m.contents?.type === 'carousel');
-  assert.ok(carousel, 'หลายใบต้องมาเป็น carousel ใบเดียว');
-
-  carousel.contents.contents.forEach((bubble: any, i: number) => {
-    const buttons = bubble.footer?.contents ?? [];
-    assert.equal(buttons.length, 2, `การ์ดใบที่ ${i + 1} ต้องมีปุ่มของตัวเอง`);
-    for (const b of buttons) {
-      assert.match(b.action.data, new RegExp(`d=${docs[i].documentId}`), 'ปุ่มต้องชี้ไปที่ใบของตัวเอง');
-    }
-  });
-
-  // ใบเดียวก็ต้องมีปุ่มในการ์ดเหมือนกัน เพราะตอนตอบเรายังไม่รู้ว่าจะมีใบที่สองตามมาไหม
-  const [single] = M.confirmExtracted({ ...docs[0], today: '2026-11-15' }) as any[];
-  assert.equal(single.contents.footer.contents.length, 2);
-
-  // และ quick reply ของการ์ดยืนยันต้องไม่มีปุ่มที่ผูกกับเอกสารใบใดใบหนึ่ง
-  for (const it of quickItems(single)) {
-    assert.ok(!/d=/.test(it.action?.data ?? ''), `${it.action?.label} ผูกกับเอกสารใบเดียว ห้ามอยู่ใน quick reply`);
-  }
 });
 
 test('ปุ่ม "ใกล้ฉัน" ต้องค้นหาให้ทันที ไม่ใช่เปิดหน้าเลือกสถานที่เปล่า ๆ', () => {
@@ -283,6 +243,59 @@ test('บันทึกแล้ว ต้องเป็นการ์ดเ�
   assert.equal(msgs[0].type, 'flex');
 });
 
+/**
+ * บั๊กจริง: ส่งรูปสองใบแล้วกด "ถูกต้อง" ได้แค่ใบล่างสุด
+ *
+ * LINE แสดง quick reply ของข้อความสุดท้ายเท่านั้น และรูปสองใบไม่ได้มาถึง
+ * ในคำขอเดียวเสมอไป — เราตอบใบแรกไปก่อนจะรู้ว่ามีใบที่สอง พอใบที่สองมา
+ * ปุ่มของใบแรกหายไปทั้งชุด แล้วไม่มีทางกลับไปกดอีกเลย
+ *
+ * ปุ่มชุดล่าสุดจึงต้องพูดถึงทุกใบที่ยังค้าง ไม่ใช่แค่ใบที่การ์ดนี้พูดถึง
+ */
+test('ปุ่มชุดล่าสุดต้องมีของทุกใบที่ยังไม่ได้ยืนยัน', () => {
+  const older = { documentId: 'old', typeKey: 'driving_license', label: null, expiry: '2030-07-23' };
+  const newer = { documentId: 'new', typeKey: 'national_id', label: null, expiry: '2030-07-22' };
+
+  const [card] = M.confirmExtracted({ ...newer, today: '2026-11-15', pending: [older, newer] }) as any[];
+  const items = quickItems(card);
+  const data = items.map((i: any) => i.action.data ?? '').join(' ');
+
+  assert.ok(data.includes('a=confirm&d=old'), 'ใบที่ส่งมาก่อนต้องยังกดยืนยันได้');
+  assert.ok(data.includes('a=confirm&d=new'), 'ใบล่าสุดต้องกดยืนยันได้');
+  assert.ok(data.includes('a=setdate&d=old') && data.includes('a=setdate&d=new'), 'แก้วันได้ทุกใบ');
+  assert.ok(items.some((i: any) => i.action.label === 'ถูกต้องทั้งหมด'), 'ต้องมีทางลัดยืนยันทั้งชุด');
+  assert.ok(items.length <= 13, `quick reply ใส่ได้ 13 ปุ่ม แต่มี ${items.length}`);
+
+  // ใบเดียวต้องไม่ถูกเปลี่ยนเป็นชุดยาว ๆ — "ถูกต้อง" คำเดียวชัดกว่าชื่อเอกสาร
+  const [single] = M.confirmExtracted({ ...newer, today: '2026-11-15' }) as any[];
+  assert.deepEqual(
+    quickItems(single).map((i: any) => i.action.label),
+    ['ถูกต้อง', 'แก้ไขวันที่']
+  );
+});
+
+test('ยืนยันไปใบหนึ่งแล้ว ใบที่เหลือต้องยังมีปุ่มอยู่', () => {
+  // ไม่งั้นพอตอบการ์ด "บันทึกแล้ว" ของใบแรก ปุ่มของใบที่สองก็หายไปด้วย
+  const left = { documentId: 'left', typeKey: 'driving_license', label: null, expiry: '2030-07-23' };
+  const [card] = M.savedAndSuggestMore({
+    typeKey: 'national_id', reminderDates: [{ send_on: '2030-06-22', offset_days: -30 }],
+    docCount: 2, today: '2026-11-15', expiry: '2030-07-22', ownedTypeKeys: ['national_id'],
+    pending: [left],
+  }) as any[];
+
+  assert.match(JSON.stringify(card), /ยังเหลืออีก 1 ใบ/);
+  const data = quickItems(card).map((i: any) => i.action.data ?? '').join(' ');
+  assert.ok(data.includes('a=confirm&d=left'), 'ใบที่เหลือต้องยังกดยืนยันได้');
+
+  /**
+   * ปุ่มอยู่ใต้การ์ดของบัตรประชาชน แต่ทำงานกับใบขับขี่
+   * ถ้าป้ายเขียนแค่ "ถูกต้อง" ผู้ใช้จะอ่านว่ามันคือปุ่มของการ์ดที่เห็นอยู่ แล้วกดผิดใบ
+   */
+  for (const label of quickItems(card).map((i: any) => i.action.label)) {
+    assert.match(label, /ใบขับขี่/, `${label} ต้องบอกด้วยว่าเป็นปุ่มของใบไหน`);
+  }
+});
+
 test('ส่งรูปหลายใบ ต้องตอบครั้งเดียว ปุ่มชุดเดียวคุมทั้งหมด', () => {
   // LINE แสดง quickReply ของข้อความสุดท้ายเท่านั้น
   // ตอบแยกใบละข้อความเมื่อไหร่ ปุ่มของใบก่อน ๆ หายหมด ยืนยันได้แค่ใบสุดท้าย
@@ -296,7 +309,7 @@ test('ส่งรูปหลายใบ ต้องตอบครั้ง�
   assert.equal(card.contents.contents.length, 2);
 
   const labels = quickItems(card).map((i: any) => i.action.label);
-  assert.ok(labels.some((l: string) => l.includes('ทั้ง 2 ใบ')), 'ต้องมีปุ่มยืนยันรวดเดียว');
+  assert.ok(labels.includes('ถูกต้องทั้งหมด'), 'ต้องมีปุ่มยืนยันรวดเดียว');
 
   // ใบเดียวยังต้องเป็นการ์ดเดี่ยวเหมือนเดิม ไม่ใช่ carousel ที่มีใบเดียว
   const one = M.confirmExtractedMany([

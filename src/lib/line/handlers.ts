@@ -18,6 +18,19 @@ import * as repo from '@/lib/db/repo';
 type Ev = Record<string, any>;
 
 /**
+ * ใบที่ยังไม่ได้กด "ถูกต้อง" ในชุดเดียวกับใบล่าสุด
+ *
+ * ทุกคำตอบที่มี quick reply ต้องพกปุ่มของใบพวกนี้ไปด้วย เพราะ LINE
+ * แสดง quick reply ของข้อความสุดท้ายเท่านั้น — ชุดก่อนหน้าหายไปทันทีที่เราตอบใหม่
+ */
+async function pendingDocs(userId: string, excludeId?: string) {
+  const rows = await repo.recentUnconfirmed(userId);
+  return rows
+    .filter((d) => d.id !== excludeId)
+    .map((d) => ({ documentId: d.id, typeKey: d.doc_type, label: d.label, expiry: d.expiry_date }));
+}
+
+/**
  * รูปหลายใบที่ส่งพร้อมกัน มาถึงเป็นหลาย event ในคำขอเดียว
  *
  * ถ้าตอบทีละใบ LINE จะแสดง quickReply ของข้อความสุดท้ายเท่านั้น
@@ -246,7 +259,11 @@ async function saveExtraction(args: {
 
   return reply(
     ev.replyToken,
-    M.confirmExtracted({ documentId: doc.id, typeKey, label: doc.label, expiry: doc.expiry_date, today })
+    M.confirmExtracted({
+      documentId: doc.id, typeKey, label: doc.label, expiry: doc.expiry_date, today,
+      // รวมใบที่ส่งมาก่อนหน้าในชุดเดียวกันด้วย — ใบพวกนั้นเพิ่งเสียปุ่มไปกับข้อความนี้
+      pending: await pendingDocs(userId),
+    })
   );
 }
 
@@ -391,6 +408,7 @@ async function onPostback(ev: Ev, userId: string) {
         ...M.savedAndSuggestMore({
           typeKey: doc.doc_type, label: doc.label, reminderDates: rows, docCount: count, today,
           expiry: doc.expiry_date, ownedTypeKeys: owned,
+          pending: await pendingDocs(userId, doc.id),
         }),
         ...urgent,
       ]);
@@ -451,6 +469,7 @@ async function onPostback(ev: Ev, userId: string) {
         ...M.savedAndSuggestMore({
           typeKey: doc.doc_type, label: doc.label, reminderDates: rows, docCount: count, today,
           expiry: doc.expiry_date, ownedTypeKeys: ownedNow,
+          pending: await pendingDocs(userId, doc.id),
         }),
         ...urgentNow,
       ]);
@@ -625,7 +644,11 @@ async function onPostback(ev: Ev, userId: string) {
 
     /* ---- ยืนยันรวดเดียวหลายใบ (มาจากการ์ดเรียงกัน) ---- */
     case 'confirm_all': {
-      const docs = await repo.listUnconfirmed(userId);
+      /**
+       * "ทั้งหมด" ในปุ่มหมายถึงใบที่เขาเห็นอยู่ตรงหน้า ไม่ใช่ทุกใบที่ค้างในระบบ
+       * ใบที่ค้างมาตั้งแต่เดือนที่แล้วไม่ได้อยู่ในสายตาเขาตอนกด — ห้ามเหมารวม
+       */
+      const docs = await repo.recentUnconfirmed(userId);
       if (docs.length === 0) return reply(ev.replyToken, M.fallback());
       for (const d of docs) {
         await repo.updateDocument(d.id, { confirmed_by_user: true });

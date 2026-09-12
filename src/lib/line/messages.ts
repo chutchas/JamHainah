@@ -318,45 +318,69 @@ function extractedBubble(d: ExtractedDoc, today: ISODate, lead?: string): LineMe
         { type: 'box', layout: 'vertical', spacing: 'sm', margin: 'md', contents: rows },
       ],
     },
-    /**
-     * ข้อยกเว้นเดียวของกฎ "ปุ่มอยู่ที่ quick reply เท่านั้น"
-     *
-     * quick reply เป็นของข้อความเดียว — ข้อความสุดท้ายเท่านั้นที่ได้แสดง
-     * แต่รูปหลายใบไม่ได้มาถึงเราในคำขอเดียวเสมอไป LINE ส่งแยกคำขอก็ได้
-     * เราจึงตอบไปแล้วหนึ่งใบก่อนจะรู้ด้วยซ้ำว่ามีใบที่สองตามมา
-     * พอใบที่สองมา ปุ่มของใบแรกก็หายไปทั้งชุด เหลือให้กดยืนยันได้ใบเดียว
-     *
-     * ปุ่มที่ผูกกับเอกสารใบไหน ต้องอยู่ในการ์ดของใบนั้น — เป็นทางเดียว
-     * ที่ถูกต้องไม่ว่ารูปจะมาถึงกี่คำขอ และผู้ใช้ไม่ต้องเดาว่ากำลังยืนยันใบไหน
-     * การ์ดเก่ายังกดได้ตลอดกาลเป็นราคาที่ต้องจ่าย — กันซ้ำที่เซิร์ฟเวอร์แทน
-     * (confirmed_by_user → alreadyConfirmed)
-     */
-    footer: {
-      type: 'box', layout: 'horizontal', spacing: 'sm', backgroundColor: CARD_BG,
-      contents: [
-        {
-          type: 'button', style: 'primary', height: 'sm', color: TEAL,
-          // displayText เด้งขึ้นในแชทเป็นคำพูดของผู้ใช้ — ต้องบอกด้วยว่ายืนยันใบไหน
-          // ไม่งั้นเลื่อนกลับมาอ่านทีหลังจะเห็นคำว่า "ถูกต้อง" ลอย ๆ สองอัน
-          action: {
-            type: 'postback', label: 'ถูกต้อง', data: pb('confirm', { d: d.documentId }),
-            displayText: `ถูกต้อง · ${plainName(d.typeKey, d.label)}`,
-          },
-        },
-        {
-          type: 'button', style: 'secondary', height: 'sm',
-          action: {
-            type: 'datetimepicker', label: 'แก้วันที่', mode: 'date',
-            data: pb('setdate', { d: d.documentId }), initial: d.expiry,
-          },
-        },
-      ],
-    },
     styles: { body: { backgroundColor: CARD_BG } },
   };
 }
 
-export function confirmExtracted(args: ExtractedDoc & { today: ISODate }): LineMessage[] {
+/**
+ * ปุ่มยืนยันของทุกใบที่ยังไม่ได้กด — ไม่ใช่แค่ใบที่การ์ดล่าสุดพูดถึง
+ *
+ * บั๊กที่มาจากการมีปุ่มชุดเดียว: LINE แสดง quick reply ของข้อความสุดท้ายเท่านั้น
+ * และรูปหลายใบไม่ได้มาถึงเราในคำขอเดียวเสมอไป (LINE ส่งแยกคำขอก็ได้)
+ * เราจึงตอบใบแรกไปก่อนจะรู้ว่ามีใบที่สอง พอใบที่สองมา ปุ่มของใบแรกหายไปทั้งชุด
+ * เหลือให้กดยืนยันได้ใบเดียว และไม่มีทางกลับไปกดใบบนได้อีกเลย
+ *
+ * ทางแก้คือปุ่มชุดล่าสุดต้องพูดถึงทุกใบที่ยังค้าง ไม่ใช่ใบเดียว
+ *
+ * ไอคอนบอกกริยา ป้ายบอกว่าใบไหน — เพราะ "แก้ไขวันที่บัตรประชาชน" ยาว 22 ตัวอักษร
+ * เกินเพดาน 20 ของ LINE ซึ่งทำให้ทั้งข้อความถูกปฏิเสธด้วย 400
+ * (ติ๊กถูก = ยืนยัน, ปฏิทิน = แก้วัน)
+ */
+function pendingChips(docs: ExtractedDoc[], ownCard = false): LineMessage | undefined {
+  if (docs.length === 0) return undefined;
+
+  /** ชื่อที่ยังอ่านรู้เรื่องเมื่อถูกบีบให้ไม่เกิน 20 ตัวอักษร */
+  const chipName = (d: ExtractedDoc): string => {
+    const full = plainName(d.typeKey, d.label);
+    return full.length <= 20 ? full : docType(d.typeKey).label;
+  };
+  /** ใส่ชื่อเอกสารต่อท้ายกริยาถ้ายังไม่ชนเพดาน 20 ตัวอักษรของ LINE */
+  const verb = (v: string, d: ExtractedDoc): string => {
+    const withName = `${v}: ${chipName(d)}`;
+    return withName.length <= 20 ? withName : chipName(d);
+  };
+
+  if (docs.length === 1) {
+    const d = docs[0];
+    /**
+     * ปุ่มอยู่ใต้การ์ดของใบไหน ผู้ใช้อ่านว่าปุ่มนั้นทำกับใบนั้น
+     * ถ้าใบที่ค้างไม่ใช่ใบที่การ์ดนี้พูดถึง ต้องบอกชื่อกำกับ ไม่งั้นเขากดผิดใบโดยไม่รู้ตัว
+     */
+    return chips([
+      { label: ownCard ? 'ถูกต้อง' : verb('ถูกต้อง', d), data: pb('confirm', { d: d.documentId }), icon: 'check' },
+      // ปฏิทินเปิดตรงนี้เลย ไม่ต้อง postback แล้วค่อยส่งปุ่มปฏิทินตามมา
+      {
+        label: ownCard ? 'แก้ไขวันที่' : verb('แก้วัน', d),
+        data: pb('setdate', { d: d.documentId }), date: true, initial: d.expiry, icon: 'calendar',
+      },
+    ]);
+  }
+
+  const list = docs.slice(0, 4);
+  return chips([
+    { label: 'ถูกต้องทั้งหมด', data: pb('confirm_all'), icon: 'check' },
+    ...list.map((d): Chip => ({ label: chipName(d), data: pb('confirm', { d: d.documentId }), icon: 'check' })),
+    // "แก้ไขทั้งหมด" = เปิดหน้าเอกสารของฉัน ซึ่งแก้ได้ทุกใบในที่เดียว
+    { label: 'แก้ไขทั้งหมด', liff: true, icon: 'edit' },
+    ...list.map((d): Chip => ({
+      label: chipName(d), data: pb('setdate', { d: d.documentId }), date: true, initial: d.expiry, icon: 'calendar',
+    })),
+  ]);
+}
+
+export function confirmExtracted(
+  args: ExtractedDoc & { today: ISODate; pending?: ExtractedDoc[] }
+): LineMessage[] {
   const t = docType(args.typeKey);
   const card: LineMessage = {
     type: 'flex',
@@ -370,15 +394,9 @@ export function confirmExtracted(args: ExtractedDoc & { today: ISODate }): LineM
       'บันทึกให้แล้ว ผิดแก้ได้เลยครับ'
     ),
   };
-  /**
-   * ปุ่มของเอกสารใบนี้อยู่ในการ์ดแล้ว — ที่นี่เหลือได้เฉพาะสิ่งที่ไม่ผูกกับใบไหน
-   * ถ้าเอา "ถูกต้อง" มาไว้ตรงนี้ด้วย พอมีการ์ดใบที่สองตามมา ปุ่มนี้จะเลื่อนไป
-   * อยู่ใต้ใบที่สอง แต่ยังยืนยันใบแรก — ผู้ใช้กดแล้วได้ผลที่ไม่ตรงกับที่เห็น
-   */
-  card.quickReply = chips([
-    { label: 'ส่งรูปเพิ่ม', camera: true, icon: 'camera' },
-    { label: LIST_NAME, liff: true, icon: 'doc' },
-  ]);
+  // ใบที่ค้างอยู่ต้องมากับปุ่มชุดนี้ด้วย ไม่งั้นปุ่มของมันหายไปพร้อมข้อความก่อนหน้า
+  const waiting = args.pending?.length ? args.pending : [args];
+  card.quickReply = pendingChips(waiting, waiting.length === 1);
   return [card];
 }
 
@@ -400,14 +418,7 @@ export function confirmExtractedMany(docs: ExtractedDoc[], today: ISODate): Line
     altText: `อ่านได้ ${docs.length} ใบ`,
     contents: { type: 'carousel', contents: docs.slice(0, 10).map((d) => extractedBubble(d, today)) },
   };
-  /**
-   * ทางลัดสำหรับคนที่อ่านผ่านแล้วเห็นว่าถูกหมด — ผูกกับ "ทั้งชุด" ไม่ใช่ใบใดใบหนึ่ง
-   * จึงไม่มีปัญหาเรื่องปุ่มอยู่ใต้การ์ดผิดใบ ส่วนทีละใบกดในการ์ดของใบนั้นได้เลย
-   */
-  card.quickReply = chips([
-    { label: `ถูกต้องทั้ง ${docs.length} ใบ`, data: pb('confirm_all'), icon: 'check' },
-    { label: LIST_NAME, liff: true, icon: 'doc' },
-  ]);
+  card.quickReply = pendingChips(docs);
   return [
     text(`อ่านได้ ${docs.length} ใบ บันทึกให้แล้ว\nเลื่อนดูทางขวา ผิดแก้ได้เลยครับ`),
     card,
@@ -815,6 +826,8 @@ export function savedAndSuggestMore(args: {
   expiry?: ISODate;
   /** ประเภทที่ผู้ใช้มีอยู่แล้ว — ของที่มีได้ใบเดียวจะไม่ถูกชวนซ้ำ */
   ownedTypeKeys?: string[];
+  /** ใบอื่นในชุดเดียวกันที่ยังไม่ได้กดถูกต้อง — ปุ่มของมันต้องมาด้วย */
+  pending?: ExtractedDoc[];
 }): LineMessage[] {
   /**
    * รอบที่ถึงกำหนดวันนี้ถูกส่งไปกับข้อความเดียวกันนี้แล้ว (inlineDueToday)
@@ -882,6 +895,24 @@ export function savedAndSuggestMore(args: {
     const card = flexCard(body, `บันทึกแล้ว — ดูให้ ${args.docCount} รายการ`);
     card.quickReply = chips([{ label: LIST_NAME, liff: true, icon: 'doc' }]);
     return [card];
+  }
+
+  /**
+   * ยังมีใบค้างอยู่ — ชวนเพิ่มใบใหม่ตอนนี้คือขัดจังหวะ
+   * และที่สำคัญกว่านั้น ถ้าปุ่มชุดนี้ไม่พูดถึงใบที่ค้าง มันจะไม่มีปุ่มอยู่ที่ไหนอีกเลย
+   */
+  if (args.pending && args.pending.length > 0) {
+    body.push(
+      { type: 'separator', margin: 'md' },
+      {
+        type: 'text', margin: 'md', size: 'sm', wrap: true, weight: 'bold', color: TEAL,
+        text: `ยังเหลืออีก ${args.pending.length} ใบที่ยังไม่ได้ยืนยันครับ`,
+      }
+    );
+    const waiting = flexCard(body, `บันทึกแล้ว — เหลืออีก ${args.pending.length} ใบ`);
+    // ownCard = false เสมอ เพราะการ์ดนี้พูดถึงใบที่เพิ่งยืนยัน ไม่ใช่ใบที่ยังค้าง
+    waiting.quickReply = pendingChips(args.pending);
+    return [waiting];
   }
 
   // ชวนเพิ่มให้เข้ากับสิ่งที่เพิ่งบันทึก — บันทึกบัตรประชาชนแล้วพูดเรื่องรถ คนจะงง
