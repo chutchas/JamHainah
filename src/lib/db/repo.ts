@@ -3,6 +3,18 @@ import { computeReminders, classifyExpiryChange } from '@/lib/domain/reminders';
 import { docType as docTypeOf } from '@/lib/domain/docTypes';
 import type { ISODate } from '@/lib/domain/thaiDate';
 
+/**
+ * ที่มาของเอกสารหนึ่งใบ
+ *
+ * รายการนี้ต้องตรงกับ check constraint documents_source_check ใน migration เสมอ
+ * เคยไม่ตรงมาแล้ว: โค้ดส่ง 'text' แต่ constraint รู้จักแค่ ocr/manual/rollover
+ * ทุก insert จากทางพิมพ์ข้อความจึงถูกฐานข้อมูลปฏิเสธ และผู้ใช้เห็นแค่
+ * "ระบบมีปัญหาชั่วคราว" โดยไม่มีใครรู้ว่าทางเข้านั้นตายไปแล้ว
+ * มี test/document-source.test.ts คอยเทียบสองที่นี้ให้
+ */
+export const DOC_SOURCES = ['ocr', 'text', 'manual', 'rollover'] as const;
+export type DocSource = (typeof DOC_SOURCES)[number];
+
 export interface DocumentRow {
   id: string;
   line_user_id: string;
@@ -115,7 +127,7 @@ export async function createDocument(args: {
   expiryDate: ISODate;
   confirmed: boolean;
   /** ocr = อ่านจากรูป · text = ผู้ใช้พิมพ์บอก · manual = เลือกวันจากปฏิทินเอง */
-  source: 'ocr' | 'text' | 'manual';
+  source: DocSource;
   meta?: Record<string, unknown>;
   imagePath?: string | null;
 }): Promise<DocumentRow> {

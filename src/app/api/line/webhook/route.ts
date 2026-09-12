@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifySignature } from '@/lib/line/signature';
 import { handleEvents } from '@/lib/line/handlers';
 import { reply } from '@/lib/line/client';
+import * as M from '@/lib/line/messages';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -51,18 +52,9 @@ export async function POST(req: NextRequest) {
     if (!ev?.replyToken || replyItselfFailed) continue;
 
     try {
-      await reply(ev.replyToken, [
-        {
-          type: 'text',
-          text: 'ขออภัยครับ ระบบมีปัญหาชั่วคราว 🙏\nลองส่งใหม่อีกครั้งได้เลย',
-          quickReply: {
-            items: [
-              { type: 'action', action: { type: 'camera', label: 'ลองใหม่' } },
-              { type: 'action', action: { type: 'postback', label: 'คุยกับคน', data: 'a=human', displayText: 'คุยกับคน' } },
-            ],
-          },
-        },
-      ]);
+      // ข้อความขอโทษอยู่ใน messages.ts เหมือนทุกข้อความ —
+      // คำพูดที่เขียนไว้นอกไฟล์นั้น คือคำพูดที่ไม่มีใครกลับมาแก้
+      await reply(ev.replyToken, M.hiccup());
     } catch (replyErr) {
       console.error('[webhook] fallback reply failed', replyErr);
     }

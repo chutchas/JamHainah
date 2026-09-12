@@ -66,6 +66,8 @@ function everyMessage(): M.LineMessage[] {
     ...M.toHuman(),
     ...M.listLink('https://liff.line.me/x'),
     ...M.fallback(),
+    ...M.hiccup(),
+    ...M.didNotUnderstand(),
   ];
 }
 

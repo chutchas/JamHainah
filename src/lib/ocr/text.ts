@@ -12,7 +12,7 @@
  */
 import OpenAI from 'openai';
 import { env } from '@/lib/env';
-import { DOC_TYPES } from '@/lib/domain/docTypes';
+import { DOC_TYPES, matchDocType } from '@/lib/domain/docTypes';
 import { formatThaiLong, parseThaiDateText } from '@/lib/domain/thaiDate';
 import type { ISODate } from '@/lib/domain/thaiDate';
 import type { Extraction } from './types';
@@ -62,7 +62,12 @@ function system(today: ISODate): string {
 ประเภทที่รู้จัก: ${TEXT_KEYS.join(', ')}`;
 }
 
-export async function extractFromText(text: string, today: ISODate): Promise<Extraction> {
+const EMPTY: Extraction = {
+  isDocument: false, docTypeKey: null, label: null, expiryDate: null, confidence: 0,
+};
+
+/** ถามโมเดล — แยกออกมาเพื่อให้ตัวเรียกจัดการกรณีมันล่มได้ */
+async function ask(text: string, today: ISODate): Promise<Extraction> {
   const client = new OpenAI({ apiKey: env.openai.key });
   const res = await client.chat.completions.create({
     model: env.openai.textModel,
@@ -78,27 +83,55 @@ export async function extractFromText(text: string, today: ISODate): Promise<Ext
   });
 
   const content = res.choices[0]?.message?.content;
-  if (!content) return { isDocument: false, docTypeKey: null, label: null, expiryDate: null, confidence: 0 };
-
+  if (!content) return { ...EMPTY };
   try {
     // normalize ตัวเดียวกับฝั่งรูป — ด่านสุดท้ายก่อนข้อมูลเข้าฐานต้องมีที่เดียว
-    const out = normalize(JSON.parse(content));
-
-    /**
-     * กติกาตายตัวชนะโมเดลเสมอถ้ามันอ่านออก
-     *
-     * "23/7/73" มีคำตอบเดียว ไม่ต้องใช้ความเข้าใจภาษาอะไรเลย
-     * ส่วนโมเดลเคยตอบว่าไม่เจอวันที่ในข้อความนี้ และเคยตีเป็น ค.ศ. 2073
-     * เหลือให้มันทำเฉพาะเรื่องที่กติกาตายตัวทำไม่ได้ เช่น "สิ้นเดือนหน้า"
-     */
-    const exact = parseThaiDateText(text, today);
-    if (exact) {
-      out.expiryDate = exact;
-      out.isDocument = true;
-      out.confidence = Math.max(out.confidence, 0.9);
-    }
-    return out;
+    return normalize(JSON.parse(content));
   } catch {
-    return { isDocument: false, docTypeKey: null, label: null, expiryDate: null, confidence: 0 };
+    return { ...EMPTY };
   }
+}
+
+export async function extractFromText(text: string, today: ISODate): Promise<Extraction> {
+  /**
+   * กติกาตายตัวมาก่อนโมเดลเสมอ ไม่ใช่มาแก้ทีหลัง
+   *
+   * "วีซ่า 12/10/2570" มีคำตอบเดียว — ประเภทหนึ่งคำ วันที่หนึ่งวัน
+   * ไม่มีอะไรให้ตีความ เรียกโมเดลคือจ่ายเงินและให้เขารอเปล่า ๆ
+   * และวันที่ OpenAI ล่ม ทางเข้านี้ต้องไม่ล่มตามไปด้วย
+   */
+  const exactDate = parseThaiDateText(text, today);
+  const exactType = matchDocType(text);
+  if (exactDate && exactType) {
+    return { isDocument: true, docTypeKey: exactType, label: null, expiryDate: exactDate, confidence: 0.95 };
+  }
+
+  let out: Extraction | null = null;
+  try {
+    out = await ask(text, today);
+  } catch (err) {
+    // โมเดลล่มไม่ได้แปลว่าเราอ่านอะไรไม่ออกเลย — ยังมีของที่กติกาตายตัวจับได้
+    console.error('[text] model failed', err instanceof Error ? err.message : String(err));
+    if (!exactDate && !exactType) throw err;
+    return {
+      isDocument: true,
+      docTypeKey: exactType,
+      label: null,
+      expiryDate: exactDate,
+      confidence: exactDate ? 0.9 : 0.5,
+    };
+  }
+
+  // โมเดลเคยตอบว่าไม่เจอวันที่ใน "23/7/73" และเคยตีเป็น ค.ศ. 2073
+  if (exactDate) {
+    out.expiryDate = exactDate;
+    out.isDocument = true;
+    out.confidence = Math.max(out.confidence, 0.9);
+  }
+  // และเคยตอบ null ทั้งที่คำว่า "วีซ่า" อยู่ในประโยค
+  if (exactType && !out.docTypeKey) {
+    out.docTypeKey = exactType;
+    out.isDocument = true;
+  }
+  return out;
 }

@@ -133,7 +133,8 @@ async function onMessage(ev: Ev, userId: string) {
     }
 
     await repo.track('text_unmatched', userId, { text: t.slice(0, 200) });
-    return reply(ev.replyToken, M.fallback());
+    // ตอบด้วยตัวอย่างรูปแบบที่ใช้ได้จริง ไม่ใช่คำโฆษณาว่าเราทำอะไรได้
+    return reply(ev.replyToken, M.didNotUnderstand());
   }
 
   return reply(ev.replyToken, M.fallback());

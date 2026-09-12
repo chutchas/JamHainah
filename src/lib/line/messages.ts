@@ -1106,6 +1106,92 @@ export function listLink(liffUrl: string): LineMessage[] {
   ];
 }
 
+/**
+ * ฉากที่ไม่มีใครอยากออกแบบ — ของเราพังเอง
+ *
+ * ของเดิมเขียนว่า "ระบบมีปัญหาชั่วคราว" ซึ่งผิดสองชั้น:
+ *   1. ผู้ใช้เพิ่งพิมพ์ "วีซ่า 12/10/2570" มา แล้วได้คำว่าระบบมีปัญหากลับไป
+ *      เขาอ่านว่า "มันอ่านภาษาไทยไม่ออก" ไม่ใช่ "โค้ดฝั่งเราพัง"
+ *      แล้วเลิกพิมพ์ไปเลย ทั้งที่ทางนี้คือทางที่เร็วที่สุดของเขา
+ *   2. คำว่า "ระบบมีปัญหา" ไม่บอกว่าเขาต้องทำอะไรต่อ และไม่บอกว่า
+ *      ของที่เพิ่งส่งมาเข้าไปแล้วหรือยัง ซึ่งเป็นคำถามเดียวที่เขาสนใจ
+ *
+ * ที่นี่จึงรับผิดเป็นคำพูดของเรา บอกทางต่อ และบอกที่ให้ไปตรวจเองได้
+ */
+/**
+ * พิมพ์อะไรมาแล้วเราอ่านไม่ออก — ไม่ใช่ความผิดของเขา
+ *
+ * fallback() เดิมตอบว่า "ผมช่วยจำวันหมดอายุเอกสารให้ครับ" ซึ่งเป็นคำโฆษณา
+ * ไม่ใช่คำตอบ — คนที่พิมพ์ชื่อเอกสารมาแล้วโดนตอบแบบนี้ จะไม่รู้เลยว่า
+ * ต้องพิมพ์ต่างจากเดิมยังไง เขาจึงเลิกพิมพ์ แล้วกลับไปทางที่ยาวกว่า
+ *
+ * ตัวอย่างสองบรรทัดสอนได้มากกว่าปุ่มสามปุ่ม เพราะมันบอกรูปแบบที่ใช้ได้จริง
+ */
+export function didNotUnderstand(): LineMessage[] {
+  const card: LineMessage = {
+    type: 'flex',
+    altText: 'พิมพ์ชื่อเอกสารกับวันหมดอายุมาได้เลยครับ',
+    contents: {
+      type: 'bubble',
+      body: {
+        type: 'box', layout: 'vertical', spacing: 'md',
+        contents: [
+          headRow('ผมยังไม่แน่ใจว่าเอกสารอะไรครับ', '15-confused'),
+          {
+            type: 'text', size: 'sm', wrap: true, margin: 'md',
+            text: 'พิมพ์ชื่อเอกสารกับวันหมดอายุมาได้เลย',
+          },
+          {
+            type: 'box', layout: 'vertical', spacing: 'xs',
+            contents: [
+              { type: 'text', size: 'sm', wrap: true, weight: 'bold', color: TEAL, text: '"วีซ่า 12/10/70"' },
+              { type: 'text', size: 'sm', wrap: true, weight: 'bold', color: TEAL, text: '"พ.ร.บ. หมดอายุ 30 มิ.ย. 69"' },
+            ],
+          },
+          {
+            type: 'text', size: 'xs', wrap: true, color: MUTED,
+            text: 'สะกดไม่ตรงก็ได้ครับ ผมเดาให้',
+          },
+        ],
+      },
+      styles: { body: { backgroundColor: CARD_BG } },
+    },
+  };
+  card.quickReply = chips([
+    { label: 'ส่งรูปเอกสาร', camera: true, icon: 'camera' },
+    { label: LIST_NAME, liff: true, icon: 'doc' },
+    { label: 'คุยกับคน', data: pb('human'), icon: 'chat' },
+  ]);
+  return [card];
+}
+
+export function hiccup(): LineMessage[] {
+  const card: LineMessage = {
+    type: 'flex',
+    altText: 'ขออภัยครับ ผมรับไม่สำเร็จ',
+    contents: {
+      type: 'bubble',
+      body: {
+        type: 'box', layout: 'vertical', spacing: 'md',
+        contents: [
+          headRow('ขออภัยครับ ผมรับไม่สำเร็จ', '15-confused'),
+          {
+            type: 'text', size: 'sm', wrap: true, margin: 'md',
+            text: 'ส่งมาอีกครั้งได้เลยครับ\nถ้ายังไม่ขึ้น เปิด "' + LIST_NAME + '" ดูได้ว่าเข้าไปแล้วหรือยัง',
+          },
+        ],
+      },
+      styles: { body: { backgroundColor: CARD_BG } },
+    },
+  };
+  card.quickReply = chips([
+    { label: LIST_NAME, liff: true, icon: 'doc' },
+    { label: 'ส่งรูปเอกสาร', camera: true, icon: 'camera' },
+    { label: 'คุยกับคน', data: pb('human'), icon: 'chat' },
+  ]);
+  return [card];
+}
+
 export function fallback(): LineMessage[] {
   return [
     text(
