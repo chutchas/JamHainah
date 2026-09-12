@@ -114,21 +114,61 @@ test('ชิปต่อข้อความต้องไม่เกิน 1
 });
 
 /**
- * ปุ่มทั้งหมดย้ายมาอยู่ที่ quick reply แล้ว
+ * ปุ่มเกือบทั้งหมดอยู่ที่ quick reply
  *
  * ไม่ใช่แค่เรื่องไอคอน — การ์ดเก่าค้างอยู่ในแชทตลอดกาล
  * ผู้ใช้เลื่อนขึ้นไปกดปุ่มของเมื่อเดือนที่แล้วได้ ส่วน quick reply หายไปเอง
+ *
+ * ข้อยกเว้นเดียวคือการ์ดยืนยันที่อ่านได้ ซึ่งปุ่มผูกกับเอกสารใบนั้นโดยตรง
+ * (เหตุผลอยู่ใน extractedBubble) — ที่อื่นห้ามมีปุ่มใน Flex เด็ดขาด
  */
-test('การ์ด Flex ต้องไม่มีปุ่มเหลืออยู่แล้ว', () => {
+test('ปุ่มใน Flex มีได้เฉพาะการ์ดยืนยัน และต้องเป็นปุ่มของใบนั้นเอง', () => {
+  const ALLOWED = new Set(['ถูกต้อง', 'แก้วันที่']);
   const found: string[] = [];
   const walk = (n: any, path = '$') => {
     if (Array.isArray(n)) return n.forEach((x, i) => walk(x, `${path}[${i}]`));
     if (!n || typeof n !== 'object') return;
-    if (n.type === 'button') found.push(`${path} → ${n.action?.label}`);
+    if (n.type === 'button' && !ALLOWED.has(n.action?.label)) found.push(`${path} → ${n.action?.label}`);
     for (const [k, v] of Object.entries(n)) if (k !== 'quickReply') walk(v, `${path}.${k}`);
   };
   everyMessage().forEach((m) => walk(m));
   assert.deepEqual(found, []);
+});
+
+/**
+ * บั๊กจริง: ส่งรูปสองใบแล้วยืนยันได้ใบเดียว
+ *
+ * LINE แสดง quick reply ของข้อความสุดท้ายเท่านั้น และรูปสองใบไม่ได้มาถึง
+ * ในคำขอเดียวเสมอไป — เราจึงตอบใบแรกไปก่อนจะรู้ว่ามีใบที่สอง พอใบที่สองมา
+ * ปุ่มของใบแรกหายไปทั้งชุด ผู้ใช้กด "ถูกต้อง" ได้ครั้งเดียว และมันไปเข้าใบล่างสุด
+ *
+ * ปุ่มที่ผูกกับเอกสารใบไหน ต้องอยู่ในการ์ดของใบนั้น และต้องชี้ไปที่ id ของใบนั้น
+ */
+test('ทุกการ์ดยืนยันมีปุ่มของตัวเอง ชี้ไปที่เอกสารใบของตัวเอง', () => {
+  const docs = [
+    { documentId: 'aaa', typeKey: 'driving_license', label: null, expiry: '2030-07-23' },
+    { documentId: 'bbb', typeKey: 'national_id', label: null, expiry: '2030-07-22' },
+  ];
+  const msgs = M.confirmExtractedMany(docs, '2026-11-15') as any[];
+  const carousel = msgs.find((m) => m.contents?.type === 'carousel');
+  assert.ok(carousel, 'หลายใบต้องมาเป็น carousel ใบเดียว');
+
+  carousel.contents.contents.forEach((bubble: any, i: number) => {
+    const buttons = bubble.footer?.contents ?? [];
+    assert.equal(buttons.length, 2, `การ์ดใบที่ ${i + 1} ต้องมีปุ่มของตัวเอง`);
+    for (const b of buttons) {
+      assert.match(b.action.data, new RegExp(`d=${docs[i].documentId}`), 'ปุ่มต้องชี้ไปที่ใบของตัวเอง');
+    }
+  });
+
+  // ใบเดียวก็ต้องมีปุ่มในการ์ดเหมือนกัน เพราะตอนตอบเรายังไม่รู้ว่าจะมีใบที่สองตามมาไหม
+  const [single] = M.confirmExtracted({ ...docs[0], today: '2026-11-15' }) as any[];
+  assert.equal(single.contents.footer.contents.length, 2);
+
+  // และ quick reply ของการ์ดยืนยันต้องไม่มีปุ่มที่ผูกกับเอกสารใบใดใบหนึ่ง
+  for (const it of quickItems(single)) {
+    assert.ok(!/d=/.test(it.action?.data ?? ''), `${it.action?.label} ผูกกับเอกสารใบเดียว ห้ามอยู่ใน quick reply`);
+  }
 });
 
 test('ปุ่ม "ใกล้ฉัน" ต้องค้นหาให้ทันที ไม่ใช่เปิดหน้าเลือกสถานที่เปล่า ๆ', () => {
