@@ -6,8 +6,9 @@
 |---|---|---|
 | `Icon-LineOA.png` | รูปโปรไฟล์ LINE OA — **อันนี้คืออันจริง** | Tum |
 | `Mascot-main.png` | มาสคอตตัวหลัก ยังไม่ได้เอาไปใช้ที่ไหน | Tum |
-| `Mascot-Act.png` | แผ่นรวมมาสคอต 12 ท่า (4x3) — ต้นฉบับ | Tum |
-| `mascot-sheet.png` | แผ่นตรวจว่าตัดมาถูกทุกตัว (ไม่ได้ใช้ในแอป) | `tools/split_mascot.py` |
+| `Mascot-Act.png` | แผ่นรวมมาสคอต ท่า 01-12 (4x3) — ต้นฉบับ | Tum |
+| `Mascot-Act2.png` | แผ่นรวมมาสคอต ท่า 13-24 (4x3) — ต้นฉบับ | Tum |
+| `mascot-sheet.png` · `mascot-sheet2.png` | แผ่นตรวจว่าตัดมาถูกทุกตัว (ไม่ได้ใช้ในแอป) | `tools/split_mascot.py` |
 | `richmenu_background.png` | พื้นหลังของ rich menu | Tum |
 | `richmenu.png` | รูป rich menu ที่ `tools/richmenu.mjs` อัปโหลดจริง | สร้างจาก `richmenu.html` |
 
@@ -17,15 +18,24 @@
 
 ## มาสคอต
 
-`public/mascot/*.png` — 12 ท่า พื้นหลังโปร่งใส จัตุรัส 512px
-ตัดจาก `Mascot-Act.png` ด้วย `python3 tools/split_mascot.py` (รันในโฟลเดอร์ tools/brand)
+`public/mascot/*.png` — 24 ท่า พื้นหลังโปร่งใส จัตุรัส 512px
+ตัดด้วย `python3 ../split_mascot.py <ชื่อแผ่น>` (รันในโฟลเดอร์ tools/brand)
+
+ชื่อท่าของแต่ละแผ่นอยู่ในตัวแปร `SHEETS` ในสคริปต์
+แผ่นใหม่ต้องเพิ่มชื่อท่าลงไปก่อน ไม่งั้นสคริปต์จะไม่ยอมรัน —
+ตั้งใจให้ล้ม ดีกว่าตัดออกมาแล้วตั้งชื่อว่า 01 02 03 ที่ไม่มีใครรู้ว่าท่าอะไร
 
 ไม่ได้ตัดตามเส้นตาราง 4x3 เพราะท่าทางล้นออกนอกช่องของตัวเอง
 สคริปต์หาก้อนจากช่องโปร่งใสจริง จับประกาย/หัวใจเข้าตัวที่ใกล้ที่สุด
 แล้วลบพิกเซลของตัวอื่นที่บังเอิญอยู่ในกรอบออก
 
-ชื่อไฟล์ตามท่า: wave · cheer · hug-bell · excited · sleep · peek ·
-search · wink · happy · run · love · announce
+ชุดแรก (01-12) ทุกตัวถือกระดิ่ง เหมาะกับเรื่องการเตือน
+ชุดสอง (13-24) ไม่มีกระดิ่ง เหมาะกับโอกาสอื่น
+
+  01 wave · 02 cheer · 03 hug-bell · 04 excited · 05 sleep · 06 peek
+  07 search · 08 wink · 09 happy · 10 run · 11 love · 12 announce
+  13 thumbsup · 14 shrug · 15 confused · 16 wai · 17 rest · 18 point
+  19 calendar · 20 camera · 21 coin · 22 party · 23 bye · 24 loading
 
 ## รูปที่สร้างจากโค้ด
 

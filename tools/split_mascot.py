@@ -11,22 +11,34 @@
 (ซึ่งทำไม่ได้อยู่แล้ว เพราะตัวมาสคอตเองก็เป็นกระดาษสีขาว)
 """
 import os
+import sys
 import numpy as np
 from PIL import Image
 from scipy import ndimage
 
-SRC = 'act.png'
 OUT = 'mascot'
 COLS, ROWS = 4, 3
 PAD = 14          # เผื่อขอบรอบตัว กันเส้นโดนตัดเรียบ
 ALPHA_MIN = 24    # ต่ำกว่านี้คือเงาจาง ๆ ไม่ใช่ตัวรูป
 
 # ชื่อตามท่าทางที่เห็นในรูป เรียงซ้ายไปขวา บนลงล่าง
-NAMES = [
-    'wave', 'cheer', 'hug-bell', 'excited',
-    'sleep', 'peek', 'search', 'wink',
-    'happy', 'run', 'love', 'announce',
-]
+SHEETS = {
+    'Mascot-Act.png': (1, [
+        'wave', 'cheer', 'hug-bell', 'excited',
+        'sleep', 'peek', 'search', 'wink',
+        'happy', 'run', 'love', 'announce',
+    ]),
+    'Mascot-Act2.png': (13, [
+        'thumbsup', 'shrug', 'confused', 'wai',
+        'rest', 'point', 'calendar', 'camera',
+        'coin', 'party', 'bye', 'loading',
+    ]),
+}
+
+SRC = sys.argv[1] if len(sys.argv) > 1 else 'Mascot-Act.png'
+if SRC not in SHEETS:
+    raise SystemExit(f'ไม่รู้จักแผ่น {SRC} — เพิ่มชื่อท่าลงใน SHEETS ก่อน')
+START, NAMES = SHEETS[SRC]
 
 im = Image.open(SRC).convert('RGBA')
 W, H = im.size
@@ -112,6 +124,6 @@ for k in sorted(boxes):
     sq.paste(crop, ((side - crop.width) // 2, (side - crop.height) // 2), crop)
     sq = sq.resize((512, 512), Image.LANCZOS)
 
-    name = f'{k + 1:02d}-{NAMES[k]}.png'
+    name = f'{START + k:02d}-{NAMES[k]}.png'
     sq.save(os.path.join(OUT, name), optimize=True)
     print(name, f'{x1-x0}x{y1-y0}', os.path.getsize(os.path.join(OUT, name)))
