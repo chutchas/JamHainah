@@ -155,6 +155,14 @@ export const ASK_TYPE_CHOICES = [
  * ถ้า OCR คืนชื่อเอกสารมาเป็น label (เช่น "บัตรประจำตัวประชาชน")
  * ก็ไม่ต้องแสดง เพราะจะกลายเป็น "บัตรประชาชน · บัตรประจำตัวประชาชน"
  */
+/**
+ * ชื่อเอกสารแบบไม่มี emoji — ใช้ในการ์ด Flex ที่มีไอคอนรูปของเราอยู่แล้ว
+ * ใส่ทั้งคู่จะได้สัญลักษณ์สองอันบอกเรื่องเดียวกัน ซึ่งไม่ได้ช่วยอะไรนอกจากรก
+ */
+export function plainName(typeKey: string, label?: string | null): string {
+  return displayName(typeKey, label).replace(/^\S+\s/u, '');
+}
+
 export function displayName(typeKey: string, label?: string | null): string {
   const t = docType(typeKey);
   if (!label) return `${t.emoji} ${t.label}`;

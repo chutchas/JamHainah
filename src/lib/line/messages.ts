@@ -9,7 +9,7 @@
  *   5. บอกวันที่จริงเสมอ ห้าม "เร็ว ๆ นี้"
  *   6. ไม่มีคำว่า โปรโมชั่น / พิเศษ / ด่วน
  */
-import { ASK_TYPE_CHOICES, DocType, SUGGEST_BY_GROUP, displayName, docType } from '@/lib/domain/docTypes';
+import { ASK_TYPE_CHOICES, DocType, SUGGEST_BY_GROUP, displayName, plainName, docType } from '@/lib/domain/docTypes';
 import { ISODate, daysBetween, formatThai, humanRemaining } from '@/lib/domain/thaiDate';
 import { env } from '@/lib/env';
 import { RenewAction, mapsSearchUrl, renewWindow } from '@/lib/domain/renewActions';
@@ -33,6 +33,27 @@ function asset(path: string): string | null {
   return env.baseUrl ? `${env.baseUrl}/${path}` : null;
 }
 const mascot = (name: string) => asset(`mascot/${name}.png`);
+/** ไอคอนประเภทเอกสาร — เส้นสีเดียวกับไอคอนปุ่ม แทน emoji ของระบบที่สีจัดจนแย่งสายตา */
+const docIcon = (typeKey: string) => asset(`icons/doc/${typeKey}.png`);
+
+/**
+ * ชื่อเอกสารกับไอคอนของมัน — ไอคอนอยู่ขวาสุด
+ *
+ * ซ้ายของแถวมีมาสคอตหรือข้อความอยู่แล้ว วางไอคอนไว้ซ้ายด้วยจะเบียดกัน
+ * ขวาสุดเป็นที่ว่างที่ตายังกวาดไปถึงตอนอ่านชื่อจบพอดี
+ */
+function docRow(typeKey: string, label?: string | null, size: 'sm' | 'md' = 'md'): LineMessage {
+  const name: LineMessage = {
+    type: 'text', text: plainName(typeKey, label), weight: 'bold', size, wrap: true, flex: 1,
+  };
+  const url = docIcon(typeKey);
+  if (!url) return name;
+  return {
+    type: 'box', layout: 'horizontal', spacing: 'sm', alignItems: 'center',
+    // ขนาดเป็น px ไม่ใช่คีย์เวิร์ด — xxs ของ LINE คือ 40px ซึ่งใหญ่เกินตัวหนังสือ 13px ไปมาก
+    contents: [name, { type: 'image', url, size: size === 'sm' ? '26px' : '34px', aspectMode: 'fit', flex: 0 }],
+  };
+}
 
 /**
  * ชื่อเดียวของหน้ารายการ
@@ -87,6 +108,8 @@ export interface Chip {
   /** ขอตำแหน่ง */
   locate?: boolean;
   icon?: IconName;
+  /** รูปจาก URL ตรง ๆ — ใช้กับไอคอนประเภทเอกสารที่ไม่ได้อยู่ในชุด IconName */
+  imageUrl?: string | null;
 }
 
 /**
@@ -123,7 +146,8 @@ function chips(items: Chip[]): LineMessage {
 
       const item: Record<string, unknown> = { type: 'action', action };
       // ไม่มี baseUrl ก็แค่ไม่มีไอคอน ปุ่มยังกดได้ — ห้ามพังเพราะเรื่องรูป
-      if (c.icon && env.baseUrl) item.imageUrl = `${env.baseUrl}/icons/${c.icon}.png`;
+      if (c.imageUrl) item.imageUrl = c.imageUrl;
+      else if (c.icon && env.baseUrl) item.imageUrl = `${env.baseUrl}/icons/${c.icon}.png`;
       return item;
     }),
   };
@@ -191,7 +215,7 @@ function headRow(title: string, pose: string, size: 'md' | 'lg' = 'md'): LineMes
   if (!url) return label;
   return {
     type: 'box', layout: 'horizontal', spacing: 'md', alignItems: 'center',
-    contents: [{ type: 'image', url, size: 'xs', aspectMode: 'fit', flex: 0 }, label],
+    contents: [{ type: 'image', url, size: size === 'lg' ? '64px' : '52px', aspectMode: 'fit', flex: 0 }, label],
   };
 }
 
@@ -262,9 +286,14 @@ export interface ExtractedDoc {
   expiry: ISODate;
 }
 
-/** เนื้อการ์ดหนึ่งใบ — ใช้ทั้งแบบใบเดียวและแบบเรียงกันหลายใบ */
-function extractedBubble(d: ExtractedDoc, today: ISODate): LineMessage {
-  const t = docType(d.typeKey);
+/**
+ * เนื้อการ์ดหนึ่งใบ — ใช้ทั้งแบบใบเดียวและแบบเรียงกันหลายใบ
+ *
+ * `lead` คือประโยคนำที่เคยเป็นข้อความแยกอยู่ข้างหน้าการ์ด
+ * รวมเข้ามาไว้ในการ์ดเลย เพราะสองฟองที่พูดเรื่องเดียวกันไม่ได้อ่านง่ายขึ้น
+ * แค่ยาวขึ้น และในแชทที่มีข้อความอื่นแทรก มันอาจถูกแยกจากกันได้ด้วย
+ */
+function extractedBubble(d: ExtractedDoc, today: ISODate, lead?: string): LineMessage {
   const rows: LineMessage[] = [];
   if (d.label) rows.push(row('เลขที่/ทะเบียน', d.label));
   rows.push(row('หมดอายุ', formatThai(d.expiry)));
@@ -275,11 +304,12 @@ function extractedBubble(d: ExtractedDoc, today: ISODate): LineMessage {
     body: {
       type: 'box', layout: 'vertical', spacing: 'md',
       contents: [
-        headRow(`${t.emoji} ${t.label}`, '07-search', 'lg'),
-        { type: 'separator', margin: 'md' },
+        ...(lead ? [headRow(lead, '07-search'), { type: 'separator', margin: 'md' }] : []),
+        docRow(d.typeKey, d.label, 'md'),
         { type: 'box', layout: 'vertical', spacing: 'sm', margin: 'md', contents: rows },
       ],
     },
+    styles: { body: { backgroundColor: CARD_BG } },
   };
 }
 
@@ -288,7 +318,11 @@ export function confirmExtracted(args: ExtractedDoc & { today: ISODate }): LineM
   const card: LineMessage = {
     type: 'flex',
     altText: `${t.label} หมดอายุ ${formatThai(args.expiry)}`,
-    contents: extractedBubble(args, args.today),
+    contents: extractedBubble(
+      args,
+      args.today,
+      'อ่านได้แบบนี้ครับ ตั้งเตือนไว้ให้แล้ว\nถ้าวันไหนผิด กดแก้ได้เลยครับ'
+    ),
   };
   card.quickReply = chips([
     { label: 'ถูกต้อง', data: pb('confirm', { d: args.documentId }), icon: 'check' },
@@ -296,7 +330,7 @@ export function confirmExtracted(args: ExtractedDoc & { today: ISODate }): LineM
     // ทำให้ผู้ใช้ต้องกดสองรอบเพื่อทำเรื่องเดียว
     { label: 'แก้ไขวันที่', data: pb('setdate', { d: args.documentId }), date: true, initial: args.expiry, icon: 'calendar' },
   ]);
-  return [text('อ่านได้แบบนี้ครับ ตั้งเตือนไว้ให้แล้ว\nถ้าวันไหนผิด กดแก้ได้เลยครับ'), card];
+  return [card];
 }
 
 /**
@@ -543,7 +577,9 @@ export function askType(ctx?: { expiry?: string | null; label?: string | null })
     : 'เอกสารนี้เป็นประเภทไหนครับ บอกผมหน่อย';
 
   return [
-    text(body, chips(opts.map((t) => ({ label: `${t.emoji} ${t.label}`, data: pb('type', { k: t.key }) })))),
+    text(body, chips(opts.map((t): Chip => ({
+      label: t.label, data: pb('type', { k: t.key }), imageUrl: docIcon(t.key),
+    })))),
   ];
 }
 
@@ -674,7 +710,7 @@ export function savedAndSuggestMore(args: {
          * ป้ายจึงกลายเป็นแค่คำใบ้ว่าควรถ่ายอะไร ไม่ใช่คำตอบที่ต้องส่งกลับมา
          */
         chips([
-          ...suggest.map((t): Chip => ({ label: `${t.emoji} ${t.label}`, camera: true })),
+          ...suggest.map((t): Chip => ({ label: t.label, camera: true, imageUrl: docIcon(t.key) })),
           { label: 'ยังก่อน', data: pb('later'), icon: 'bell' },
         ])
       )
@@ -712,13 +748,15 @@ export function upcomingReminder(
   const urgent = soonest.offsetDays > -14;
 
   const header = early
-    ? `${t.emoji} ${t.label}${soonest.label ? ` ${soonest.label}` : ''}\nต่อได้ตั้งแต่วันนี้แล้วครับ`
-    : `${urgent ? '⚠️' : '🔔'} ${items.length > 1 ? 'มี ' + items.length + ' รายการใกล้ครบกำหนด' : displayName(soonest.typeKey, soonest.label)}`;
+    ? `${plainName(soonest.typeKey, soonest.label)}\nต่อได้ตั้งแต่วันนี้แล้วครับ`
+    : items.length > 1
+    ? `มี ${items.length} รายการใกล้ครบกำหนด`
+    : `${plainName(soonest.typeKey, soonest.label)} ใกล้ครบกำหนดแล้ว`;
 
   const rows = items.map((it) => ({
     type: 'box', layout: 'vertical', spacing: 'xs',
     contents: [
-      { type: 'text', text: displayName(it.typeKey, it.label), size: 'sm', weight: 'bold', wrap: true },
+      docRow(it.typeKey, it.label, 'sm'),
       {
         type: 'box', layout: 'horizontal',
         contents: [
@@ -821,7 +859,7 @@ export function dueReminder(items: ReminderItem[]): LineMessage[] {
   const rows = items.slice(0, 4).map((it) => ({
     type: 'box', layout: 'vertical', spacing: 'xs', margin: 'md',
     contents: [
-      { type: 'text', text: displayName(it.typeKey, it.label), size: 'sm', weight: 'bold', wrap: true },
+      docRow(it.typeKey, it.label, 'sm'),
       { type: 'text', text: `ครบกำหนด ${formatThai(it.expiry)}`, size: 'xs', color: MUTED },
     ],
   })) as LineMessage[];
@@ -888,7 +926,7 @@ export function pickRenewed(items: ReminderItem[], today: ISODate): LineMessage[
   const rows = items.slice(0, 4).map((it) => ({
     type: 'box', layout: 'vertical', spacing: 'xs', margin: 'md',
     contents: [
-      { type: 'text', text: displayName(it.typeKey, it.label), size: 'sm', weight: 'bold', wrap: true },
+      docRow(it.typeKey, it.label, 'sm'),
       { type: 'text', text: `หมดอายุ ${formatThai(it.expiry)} · ${humanRemaining(today, it.expiry)}`, size: 'xs', color: MUTED, wrap: true },
     ],
   })) as LineMessage[];
