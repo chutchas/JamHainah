@@ -15,16 +15,28 @@ import cairosvg
 # ไล่สีคนละองศาในแต่ละไอคอน จะทำให้ชุดดูไม่เป็นชุดเดียวกันทันที
 TEAL = "#0B8A72"
 GREEN = "#4FC49B"
+# สีของกลุ่ม "แก้" — สีเดียวกับตัวเลขเตือนในการ์ด (WARN)
+# quick reply ตั้งสีตัวอักษรไม่ได้ ไอคอนจึงเป็นที่เดียวที่บอกได้ว่าปุ่มนี้คนละพวก
+RUST = "#B8460E"
+AMBER = "#E2703A"
 W = 8  # เส้นหนา 8 ที่ 96px = 2px ตอนแสดงจริง
 
-HEAD = (
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">'
-    '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
-    f'<stop offset="0" stop-color="{TEAL}"/><stop offset="1" stop-color="{GREEN}"/>'
-    "</linearGradient></defs>"
-    f'<g fill="none" stroke="url(#g)" stroke-width="{W}" '
-    'stroke-linecap="round" stroke-linejoin="round">'
-)
+# ไอคอนที่ใช้กับปุ่ม "แก้..." เท่านั้น — ที่เหลือเป็นเขียวทั้งชุด
+RED_ICONS = {"edit"}
+
+
+def head(name):
+    dark, light = (RUST, AMBER) if name in RED_ICONS else (TEAL, GREEN)
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">'
+        '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
+        f'<stop offset="0" stop-color="{dark}"/><stop offset="1" stop-color="{light}"/>'
+        "</linearGradient></defs>"
+        f'<g fill="none" stroke="url(#g)" stroke-width="{W}" '
+        'stroke-linecap="round" stroke-linejoin="round">'
+    )
+
+
 TAIL = "</g></svg>"
 
 ICONS = {
@@ -107,7 +119,7 @@ out = os.path.join(os.path.dirname(__file__), "icons")
 os.makedirs(out, exist_ok=True)
 
 for name, body in ICONS.items():
-    svg = HEAD + body + TAIL
+    svg = head(name) + body + TAIL
     cairosvg.svg2png(
         bytestring=svg.encode("utf-8"),
         write_to=os.path.join(out, f"{name}.png"),
