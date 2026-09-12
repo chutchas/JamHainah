@@ -49,6 +49,20 @@
   */
   .frame { position: absolute; inset: 0; }
 
+  /*
+    มาสคอตโผล่ที่มุมบนขวาของการ์ด เลยขอบออกมานิดหน่อย
+    ให้รู้สึกเหมือนสติกเกอร์แปะทับ ไม่ใช่ภาพที่ถูกใส่ไว้ในกรอบ
+    เอียงคนละองศาเล็กน้อย ชุดนี้จะได้ไม่ดูเหมือนแสตมป์ที่ปั๊มด้วยแม่พิมพ์เดียว
+  */
+  .mascot {
+    position: absolute; top: -70px; right: -34px;
+    width: 232px; height: 232px;
+    filter: drop-shadow(0 10px 18px rgba(11, 138, 114, .18));
+  }
+  .cell:nth-child(2) .mascot { transform: rotate(6deg); }
+  .cell:nth-child(3) .mascot { transform: rotate(-5deg); }
+  .cell:nth-child(4) .mascot { transform: rotate(4deg); }
+
   .ico { width: 196px; height: 196px; }
   .label { font-size: 78px; font-weight: 700; line-height: 1.25; color: var(--teal); }
 </style>
@@ -73,6 +87,7 @@
       <path d="M22 36h10l6-8h20l6 8h10a6 6 0 0 1 6 6v28a6 6 0 0 1-6 6H22a6 6 0 0 1-6-6V42a6 6 0 0 1 6-6z"/>
       <circle cx="48" cy="56" r="13"/>
     </svg>
+    <img class="mascot" src="../../public/mascot/06-peek.png" alt="">
     <div class="label">เพิ่มเอกสาร</div>
   </div>
 </div>
@@ -90,6 +105,7 @@
       <path d="M56 16v14h14"/>
       <path d="M40 54h18M40 66h12"/>
     </svg>
+    <img class="mascot" src="../../public/mascot/07-search.png" alt="">
     <div class="label">เอกสารของฉัน</div>
   </div>
 </div>
@@ -105,6 +121,7 @@
          stroke-linecap="round" stroke-linejoin="round">
       <path d="M24 26h48a7 7 0 0 1 7 7v26a7 7 0 0 1-7 7H46L30 80V66h-6a7 7 0 0 1-7-7V33a7 7 0 0 1 7-7z"/>
     </svg>
+    <img class="mascot" src="../../public/mascot/01-wave.png" alt="">
     <div class="label">คุยกับคน</div>
   </div>
 </div>
