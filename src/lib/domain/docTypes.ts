@@ -48,6 +48,13 @@ export interface DocType {
   singleton?: boolean;
   /** ข้อความช่วยตอนขอรูป */
   hint?: string;
+  /**
+   * ชื่อสั้นสำหรับป้ายปุ่มที่มีคำนำหน้า เช่น "แก้ ตรอ."
+   *
+   * quick reply ของ LINE รับป้ายยาวได้ 20 ตัวอักษร เกินแล้วมันตอบ 400 ทั้งก้อน
+   * ใส่เฉพาะประเภทที่ชื่อเต็มยาวจนไม่เหลือที่ให้คำว่า "ถูกต้อง"/"แก้"
+   */
+  shortLabel?: string;
 }
 
 export const DOC_TYPES: DocType[] = [
@@ -71,7 +78,7 @@ export const DOC_TYPES: DocType[] = [
     hint: 'ถ่ายหน้าตารางกรมธรรม์',
   },
   {
-    key: 'vehicle_inspection', label: 'ตรวจสภาพรถ (ตรอ.)', emoji: '🔧', tier: 1, group: 'vehicle',
+    key: 'vehicle_inspection', label: 'ตรวจสภาพรถ (ตรอ.)', emoji: '🔧', tier: 1, group: 'vehicle', shortLabel: 'ตรอ.',
     offsets: [-30, -7, 1], termMonths: 12, ocr: true,
   },
   {
@@ -95,11 +102,11 @@ export const DOC_TYPES: DocType[] = [
     hint: 'ถ่ายหน้าที่มีรูปและวันหมดอายุ',
   },
   { key: 'visa', label: 'วีซ่า', emoji: '🛂', tier: 2, group: 'identity', offsets: [-60, -30, -7, 1], ocr: true },
-  { key: 'work_permit', label: 'ใบอนุญาตทำงาน', emoji: '💼', tier: 2, group: 'identity', offsets: [-60, -30, -7, 1], termMonths: 12, ocr: true },
+  { key: 'work_permit', label: 'ใบอนุญาตทำงาน', emoji: '💼', tier: 2, group: 'identity', shortLabel: 'ใบทำงาน', offsets: [-60, -30, -7, 1], termMonths: 12, ocr: true },
   { key: 'health_insurance', label: 'ประกันสุขภาพ', emoji: '🏥', tier: 2, group: 'insurance', offsets: [-45, -14, 1], termMonths: 12, ocr: true },
   { key: 'life_insurance', label: 'ประกันชีวิต', emoji: '📘', tier: 2, group: 'insurance', offsets: [-45, -14, 1], termMonths: 12, ocr: true },
-  { key: 'social_security', label: 'ประกันสังคม ม.39/40', emoji: '🧾', tier: 2, group: 'insurance', offsets: [-30, -7, 1], termMonths: 12, ocr: false, singleton: true },
-  { key: 'professional_license', label: 'ใบอนุญาตวิชาชีพ', emoji: '📜', tier: 2, group: 'identity', offsets: [-90, -30, -7, 1], ocr: true },
+  { key: 'social_security', label: 'ประกันสังคม ม.39/40', emoji: '🧾', tier: 2, group: 'insurance', shortLabel: 'ประกันสังคม', offsets: [-30, -7, 1], termMonths: 12, ocr: false, singleton: true },
+  { key: 'professional_license', label: 'ใบอนุญาตวิชาชีพ', emoji: '📜', tier: 2, group: 'identity', shortLabel: 'ใบวิชาชีพ', offsets: [-90, -30, -7, 1], ocr: true },
   { key: 'lease', label: 'สัญญาเช่า', emoji: '🏠', tier: 2, group: 'other', offsets: [-60, -30, -7, 1], termMonths: 12, ocr: false },
 
   // ---------------- tier 3 : ผู้ใช้พิมพ์เองอะไรก็ได้ ----------------

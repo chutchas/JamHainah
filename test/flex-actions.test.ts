@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import * as M from '../src/lib/line/messages';
+import { DOC_TYPES } from '../src/lib/domain/docTypes';
 
 /**
  * ตั้งก่อนได้เลยแม้ import จะถูกยกขึ้นไปบนสุด
@@ -272,6 +273,25 @@ test('ปุ่มชุดล่าสุดต้องมีของทุ�
     quickItems(single).map((i: any) => i.action.label),
     ['ถูกต้อง', 'แก้ไขวันที่']
   );
+});
+
+/**
+ * ป้ายปุ่มมีคำนำหน้า ("แก้ ...") แล้ว ที่ว่างจึงเหลือน้อยลง
+ * ประเภทที่ชื่อยาวอย่าง "ประกันสังคม ม.39/40" จะดันป้ายเกิน 20 ตัวอักษร
+ * แล้ว LINE ตอบ 400 ทั้งก้อน — ต้องมี shortLabel รองรับให้ครบทุกประเภท
+ */
+test('ทุกประเภทเอกสาร ป้ายปุ่มต้องพอดี 20 ตัวอักษร โดยไม่ถูกตัด', () => {
+  for (const t of DOC_TYPES) {
+    const d = { documentId: 'x', typeKey: t.key, label: null, expiry: '2030-01-01' };
+    const msgs = M.confirmExtracted({
+      ...d, today: '2026-11-15', pending: [d, { ...d, documentId: 'y' }],
+    }) as any[];
+    for (const it of quickItems(msgs[msgs.length - 1])) {
+      const label: string = it.action.label;
+      assert.ok(label.length <= 20, `${t.key}: "${label}" ยาว ${label.length} ตัว`);
+      assert.ok(!label.endsWith('…'), `${t.key}: "${label}" ถูกตัดจนอ่านไม่รู้เรื่อง`);
+    }
+  }
 });
 
 test('ยืนยันไปใบหนึ่งแล้ว ใบที่เหลือต้องยังมีปุ่มอยู่', () => {

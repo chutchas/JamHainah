@@ -339,16 +339,19 @@ function extractedBubble(d: ExtractedDoc, today: ISODate, lead?: string): LineMe
 function pendingChips(docs: ExtractedDoc[], ownCard = false): LineMessage | undefined {
   if (docs.length === 0) return undefined;
 
-  /** ชื่อที่ยังอ่านรู้เรื่องเมื่อถูกบีบให้ไม่เกิน 20 ตัวอักษร */
-  const chipName = (d: ExtractedDoc): string => {
-    const full = plainName(d.typeKey, d.label);
-    return full.length <= 20 ? full : docType(d.typeKey).label;
+  /**
+   * ชื่อเอกสารที่ยาวไม่เกินที่เหลือให้ — ลองชื่อเต็ม ชื่อประเภท แล้วชื่อย่อ
+   * ห้ามตัดด้วย "…" เพราะ "แก้ ประกันสังคม ม.3…" อ่านแล้วไม่รู้ว่าใบไหน
+   */
+  const chipName = (d: ExtractedDoc, budget = 20): string => {
+    const t = docType(d.typeKey);
+    for (const name of [plainName(d.typeKey, d.label), t.label, t.shortLabel]) {
+      if (name && name.length <= budget) return name;
+    }
+    return t.shortLabel ?? t.label;
   };
-  /** ใส่ชื่อเอกสารต่อท้ายกริยาถ้ายังไม่ชนเพดาน 20 ตัวอักษรของ LINE */
-  const verb = (v: string, d: ExtractedDoc): string => {
-    const withName = `${v}: ${chipName(d)}`;
-    return withName.length <= 20 ? withName : chipName(d);
-  };
+  /** คำนำหน้าบอกว่าปุ่มนี้ทำอะไร ชื่อบอกว่าทำกับใบไหน */
+  const verb = (v: string, d: ExtractedDoc): string => `${v} ${chipName(d, 20 - v.length - 1)}`;
 
   if (docs.length === 1) {
     const d = docs[0];
@@ -359,9 +362,10 @@ function pendingChips(docs: ExtractedDoc[], ownCard = false): LineMessage | unde
     return chips([
       { label: ownCard ? 'ถูกต้อง' : verb('ถูกต้อง', d), data: pb('confirm', { d: d.documentId }), icon: 'check' },
       // ปฏิทินเปิดตรงนี้เลย ไม่ต้อง postback แล้วค่อยส่งปุ่มปฏิทินตามมา
+      // ไอคอนดินสอตัวเดียวกับ "แก้ไขทั้งหมด" — กลุ่มปุ่มแก้ต้องหน้าตาเป็นพวกเดียวกัน
       {
-        label: ownCard ? 'แก้ไขวันที่' : verb('แก้วัน', d),
-        data: pb('setdate', { d: d.documentId }), date: true, initial: d.expiry, icon: 'calendar',
+        label: ownCard ? 'แก้ไขวันที่' : verb('แก้', d),
+        data: pb('setdate', { d: d.documentId }), date: true, initial: d.expiry, icon: 'edit',
       },
     ]);
   }
@@ -372,8 +376,13 @@ function pendingChips(docs: ExtractedDoc[], ownCard = false): LineMessage | unde
     ...list.map((d): Chip => ({ label: chipName(d), data: pb('confirm', { d: d.documentId }), icon: 'check' })),
     // "แก้ไขทั้งหมด" = เปิดหน้าเอกสารของฉัน ซึ่งแก้ได้ทุกใบในที่เดียว
     { label: 'แก้ไขทั้งหมด', liff: true, icon: 'edit' },
+    /**
+     * ปุ่มแก้ต้องแยกจากปุ่มยืนยันให้ออกด้วยตัวหนังสือ ไม่ใช่ด้วยไอคอนอย่างเดียว
+     * ไอคอน 24px สองสีบนมือถือเล็กเกินกว่าจะเป็นเส้นแบ่งเดียวที่มี
+     * (สีตัวอักษรตั้งเองไม่ได้ — LINE จัดสไตล์ quick reply ทั้งหมดเอง)
+     */
     ...list.map((d): Chip => ({
-      label: chipName(d), data: pb('setdate', { d: d.documentId }), date: true, initial: d.expiry, icon: 'calendar',
+      label: verb('แก้', d), data: pb('setdate', { d: d.documentId }), date: true, initial: d.expiry, icon: 'edit',
     })),
   ]);
 }
