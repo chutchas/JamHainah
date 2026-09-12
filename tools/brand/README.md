@@ -5,13 +5,27 @@
 | ไฟล์ | ใช้ที่ไหน | ใครทำ |
 |---|---|---|
 | `Icon-LineOA.png` | รูปโปรไฟล์ LINE OA — **อันนี้คืออันจริง** | Tum |
-| `Mascot-main.png` · `Mascot-Act.png` | มาสคอต ยังไม่ได้เอาไปใช้ที่ไหน | Tum |
+| `Mascot-main.png` | มาสคอตตัวหลัก ยังไม่ได้เอาไปใช้ที่ไหน | Tum |
+| `Mascot-Act.png` | แผ่นรวมมาสคอต 12 ท่า (4x3) — ต้นฉบับ | Tum |
+| `mascot-sheet.png` | แผ่นตรวจว่าตัดมาถูกทุกตัว (ไม่ได้ใช้ในแอป) | `tools/split_mascot.py` |
 | `richmenu_background.png` | พื้นหลังของ rich menu | Tum |
 | `richmenu.png` | รูป rich menu ที่ `tools/richmenu.mjs` อัปโหลดจริง | สร้างจาก `richmenu.html` |
 
 `src/app/icon.png` และ `src/app/apple-icon.png` เป็นรูปเดียวกับ `Icon-LineOA.png`
 ย่อลงมาเป็น favicon ของหน้าเอกสารของฉัน — ไฟล์ต้นฉบับ 1.2MB ใหญ่เกินกว่าจะให้
 ทุกคนโหลดเพื่อแสดงผลขนาด 32px
+
+## มาสคอต
+
+`public/mascot/*.png` — 12 ท่า พื้นหลังโปร่งใส จัตุรัส 512px
+ตัดจาก `Mascot-Act.png` ด้วย `python3 tools/split_mascot.py` (รันในโฟลเดอร์ tools/brand)
+
+ไม่ได้ตัดตามเส้นตาราง 4x3 เพราะท่าทางล้นออกนอกช่องของตัวเอง
+สคริปต์หาก้อนจากช่องโปร่งใสจริง จับประกาย/หัวใจเข้าตัวที่ใกล้ที่สุด
+แล้วลบพิกเซลของตัวอื่นที่บังเอิญอยู่ในกรอบออก
+
+ชื่อไฟล์ตามท่า: wave · cheer · hug-bell · excited · sleep · peek ·
+search · wink · happy · run · love · announce
 
 ## รูปที่สร้างจากโค้ด
 
