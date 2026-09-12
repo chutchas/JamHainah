@@ -78,7 +78,7 @@ export const DOC_TYPES: DocType[] = [
     hint: 'ถ่ายหน้าตารางกรมธรรม์',
   },
   {
-    key: 'vehicle_inspection', label: 'ตรวจสภาพรถ (ตรอ.)', emoji: '🔧', tier: 1, group: 'vehicle', shortLabel: 'ตรอ.',
+    key: 'vehicle_inspection', label: 'ตรวจสภาพรถ (ตรอ.)', emoji: '🔧', tier: 1, group: 'vehicle', shortLabel: 'ตรวจสภาพรถ',
     offsets: [-30, -7, 1], termMonths: 12, ocr: true,
   },
   {
