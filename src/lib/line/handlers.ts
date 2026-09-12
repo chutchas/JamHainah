@@ -351,12 +351,7 @@ async function onImageBatch(events: Ev[], userId: string) {
   if (saved.length === 0) return reply(token, M.notADocument());
 
   const msgs = M.confirmExtractedMany(saved, today);
-  if (skipped.length > 0) {
-    msgs.unshift({
-      type: 'text',
-      text: `${skipped.length} ใบผมยังอ่านไม่ครบครับ (${skipped.join(' · ')})\nส่งใบนั้นมาใหม่ทีละใบได้ไหมครับ`,
-    });
-  }
+  if (skipped.length > 0) msgs.unshift(M.someUnreadable(skipped));
   return reply(token, msgs);
 }
 
@@ -680,10 +675,10 @@ async function onPostback(ev: Ev, userId: string) {
       return reply(ev.replyToken, M.deleted());
 
     case 'later':
-      return reply(ev.replyToken, [{ type: 'text', text: 'ได้ครับ ส่งมาเมื่อไหร่ก็ได้ 👍' }]);
+      return reply(ev.replyToken, M.later());
 
     case 'cancel':
-      return reply(ev.replyToken, [{ type: 'text', text: 'ยกเลิกแล้วครับ' }]);
+      return reply(ev.replyToken, M.cancelled());
 
     default:
       return reply(ev.replyToken, M.fallback());

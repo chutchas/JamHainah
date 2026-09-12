@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import * as M from '../src/lib/line/messages';
 import { DOC_TYPES } from '../src/lib/domain/docTypes';
 
@@ -67,10 +70,29 @@ function everyMessage(): M.LineMessage[] {
     ...M.toHuman(),
     ...M.listLink('https://liff.line.me/x'),
     ...M.fallback(),
+    ...M.later(),
+    ...M.cancelled(),
     ...M.hiccup(),
     ...M.didNotUnderstand(),
   ];
 }
+
+/**
+ * ข้อความทุกคำต้องอยู่ใน messages.ts
+ *
+ * "ได้ครับ ส่งมาเมื่อไหร่ก็ได้ 👍" เคยเขียนดิบ ๆ อยู่ใน handlers.ts
+ * มันจึงไม่ผ่าน chips() (ไม่มีปุ่มให้กดต่อเลย) ไม่ผ่านกฎ 20 ตัวอักษร
+ * และมี emoji ของระบบหลุดเทสต์มาได้ ทั้งที่เราตรวจ everyMessage() อยู่
+ * — สิ่งที่เทสต์ไม่เห็น คือสิ่งที่กฎไม่มีผลกับมัน
+ */
+test('ห้ามมีข้อความเขียนดิบ ๆ อยู่นอก messages.ts', () => {
+  const dir = join(import.meta.dirname, '..', 'src', 'lib', 'line');
+  for (const f of ['handlers.ts', 'client.ts']) {
+    const src = readFileSync(join(dir, f), 'utf8');
+    const raw = [...src.matchAll(/type:\s*'text'\s*,\s*text:/g)];
+    assert.equal(raw.length, 0, `${f} สร้างข้อความเอง ${raw.length} แห่ง — ย้ายไป messages.ts`);
+  }
+});
 
 function quickItems(msg: any): any[] {
   return msg?.quickReply?.items ?? [];
