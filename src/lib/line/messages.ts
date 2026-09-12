@@ -18,6 +18,21 @@ export type LineMessage = Record<string, unknown>;
 
 const WARN = '#B8460E';
 const MUTED = '#8A9A93';
+/** เขียวอมฟ้าเข้ม — ตัวเดียวกับต้นไล่สีของไอคอนและตัวอักษรบน rich menu */
+const TEAL = '#0B8A72';
+/** พื้นการ์ด เขียวจาง ๆ ให้เข้าโทนเดียวกับปกและพื้นหลัง rich menu */
+const CARD_BG = '#F5FBF8';
+
+/**
+ * รูปในโปรเจกต์ — ไม่มี NEXT_PUBLIC_BASE_URL ก็คืน null
+ *
+ * ทุกที่ที่เรียกต้องรับ null ได้ แล้วข้ามรูปนั้นไป
+ * การ์ดที่ไม่มีรูปยังอ่านรู้เรื่อง แต่บอทที่เงียบเพราะรูปไม่ขึ้นคือของเสีย
+ */
+function asset(path: string): string | null {
+  return env.baseUrl ? `${env.baseUrl}/${path}` : null;
+}
+const mascot = (name: string) => asset(`mascot/${name}.png`);
 
 /**
  * ชื่อเดียวของหน้ารายการ
@@ -138,15 +153,46 @@ function row(label: string, value: string, hot = false): LineMessage {
   };
 }
 
-function bubble(body: LineMessage[], footer?: LineMessage[], altText = 'จำให้นะ'): LineMessage {
+function bubble(
+  body: LineMessage[],
+  footer?: LineMessage[],
+  altText = 'จำให้นะ',
+  hero?: string | null
+): LineMessage {
   const contents: Record<string, unknown> = {
     type: 'bubble',
     body: { type: 'box', layout: 'vertical', spacing: 'md', contents: body },
+    // พื้นการ์ดสีเดียวกับโทนของปกและ rich menu — แชทกับหน้าเว็บจะได้เป็นที่เดียวกัน
+    styles: { body: { backgroundColor: CARD_BG } },
   };
+  if (hero) {
+    contents.hero = { type: 'image', url: hero, size: 'full', aspectRatio: '20:9', aspectMode: 'cover' };
+  }
   if (footer?.length) {
-    contents.footer = { type: 'box', layout: 'vertical', spacing: 'sm', contents: footer };
+    contents.footer = {
+      type: 'box', layout: 'vertical', spacing: 'sm', contents: footer,
+      backgroundColor: CARD_BG,
+    };
   }
   return { type: 'flex', altText, contents };
+}
+
+/**
+ * หัวการ์ด: มาสคอตยืนอยู่ข้างชื่อเรื่อง
+ *
+ * เลือกท่าให้ตรงกับสิ่งที่การ์ดกำลังบอก ไม่ใช่หยิบตัวไหนก็ได้มาแปะให้ดูน่ารัก
+ * มาสคอตที่ท่าไม่ตรงกับเนื้อหา คือสัญญาณรบกวนที่ผู้ใช้ต้องเรียนรู้ที่จะมองข้าม
+ */
+function headRow(title: string, pose: string, size: 'md' | 'lg' = 'md'): LineMessage {
+  const label: LineMessage = {
+    type: 'text', text: title, weight: 'bold', size, wrap: true, color: TEAL, flex: 1, gravity: 'center',
+  };
+  const url = mascot(pose);
+  if (!url) return label;
+  return {
+    type: 'box', layout: 'horizontal', spacing: 'md', alignItems: 'center',
+    contents: [{ type: 'image', url, size: 'xs', aspectMode: 'fit', flex: 0 }, label],
+  };
 }
 
 
@@ -155,6 +201,38 @@ function bubble(body: LineMessage[], footer?: LineMessage[], altText = 'จำ�
  * เป้าหมายเดียว: ให้เขาส่งรูปภายใน 60 วินาที
  * ห้ามมี เงื่อนไขการใช้บริการ / ราคา / การสมัคร ตรงนี้
  * ============================================================ */
+/**
+ * การ์ดต้อนรับ — ข้อความแรกที่เขาเห็นหลังกด Add เพื่อน
+ *
+ * ใช้การ์ดแทนข้อความเปล่า เพราะนี่คือจังหวะเดียวที่เราได้พิสูจน์ว่า
+ * นี่ไม่ใช่บอทสแปมที่เขาเผลอกดตาม การ์ดที่มีปกกับมาสคอตบอกเรื่องนั้นได้ใน 1 วินาที
+ * เร็วกว่าที่เขาจะอ่านบรรทัดแรกจบ
+ */
+function welcome(): LineMessage {
+  const card = bubble(
+    [
+      headRow('สวัสดีครับ 👋', '16-wai', 'lg'),
+      { type: 'text', text: 'ต่อไปนี้ผมจำวันหมดอายุเอกสารให้เอง', size: 'sm', wrap: true, color: MUTED },
+      { type: 'separator', margin: 'md' },
+      {
+        type: 'box', layout: 'vertical', spacing: 'sm', margin: 'md',
+        contents: [
+          { type: 'text', text: 'ภาษีรถ · พ.ร.บ. · ใบขับขี่\nประกัน · พาสปอร์ต · บัตรประชาชน', size: 'sm', wrap: true },
+          { type: 'separator', margin: 'md' },
+          { type: 'text', text: 'ถ่ายรูปเอกสารส่งมาได้เลย', size: 'sm', wrap: true, margin: 'md', weight: 'bold' },
+          { type: 'text', text: 'หรือพิมพ์บอกก็ได้ครับ เช่น\n"พ.ร.บ. หมดอายุ 30/6/69"', size: 'sm', wrap: true, color: MUTED },
+          { type: 'text', text: 'ไม่ต้องสมัคร ไม่ต้องกรอกอะไรครับ', size: 'xs', wrap: true, color: MUTED, margin: 'md' },
+        ],
+      },
+    ],
+    undefined,
+    'จำให้นะ — ผมจำวันหมดอายุเอกสารให้เอง',
+    asset('brand/flex-hero.jpg')
+  );
+  card.quickReply = chips([{ label: 'ส่งรูปเอกสาร', camera: true, icon: 'camera' }]);
+  return card;
+}
+
 export function greeting(): LineMessage[] {
   return [
     /**
@@ -167,16 +245,7 @@ export function greeting(): LineMessage[] {
      * ตอนนี้พิมพ์มาได้เลยโดยไม่ต้องกดอะไรก่อน ปุ่มนั้นจึงไม่มีเหตุผลให้อยู่ต่อ
      * และประโยคตัวอย่างสอนได้ดีกว่าปุ่ม เพราะมันบอกด้วยว่าพิมพ์ยังไง
      */
-    text(
-      'สวัสดีครับ 👋\n' +
-        'ต่อไปนี้ผมจำวันหมดอายุเอกสารให้เอง\n' +
-        'ภาษีรถ · พ.ร.บ. · ใบขับขี่ · ประกัน · พาสปอร์ต\n\n' +
-        'ถ่ายรูปเอกสารส่งมาได้เลย\n' +
-        'หรือพิมพ์บอกก็ได้ครับ เช่น\n' +
-        '"พ.ร.บ. หมดอายุ 30/6/69"\n\n' +
-        'ไม่ต้องสมัคร ไม่ต้องกรอกอะไรครับ',
-      chips([{ label: 'ส่งรูปเอกสาร', camera: true, icon: 'camera' }])
-    ),
+    welcome(),
   ];
 }
 
@@ -206,7 +275,7 @@ function extractedBubble(d: ExtractedDoc, today: ISODate): LineMessage {
     body: {
       type: 'box', layout: 'vertical', spacing: 'md',
       contents: [
-        { type: 'text', text: `${t.emoji} ${t.label}`, weight: 'bold', size: 'lg', wrap: true },
+        headRow(`${t.emoji} ${t.label}`, '07-search', 'lg'),
         { type: 'separator', margin: 'md' },
         { type: 'box', layout: 'vertical', spacing: 'sm', margin: 'md', contents: rows },
       ],
@@ -708,7 +777,7 @@ export function upcomingReminder(
 
   const card = bubble(
       [
-        { type: 'text', text: header, weight: 'bold', size: 'md', wrap: true },
+        headRow(header, urgent ? '12-announce' : '19-calendar'),
         ...(!win.open && win.opensOn
           ? [{ type: 'text', text: `ยังไม่ถึงรอบต่อ — ต่อได้ตั้งแต่ ${formatThai(win.opensOn)}`, size: 'xs', color: MUTED, wrap: true }]
           : early && t.renewWindowDays
@@ -759,7 +828,7 @@ export function dueReminder(items: ReminderItem[]): LineMessage[] {
 
   const card = bubble(
     [
-      { type: 'text', text: `มี ${items.length} รายการครบกำหนดแล้วครับ`, weight: 'bold', size: 'md', wrap: true },
+      headRow(`มี ${items.length} รายการครบกำหนดแล้วครับ`, '04-excited'),
       { type: 'text', text: 'ต่อใบไหนไปแล้ว กดใบนั้นได้เลยครับ', size: 'sm', color: MUTED, wrap: true },
       { type: 'separator', margin: 'md' },
       ...rows,
@@ -826,7 +895,7 @@ export function pickRenewed(items: ReminderItem[], today: ISODate): LineMessage[
 
   const card = bubble(
     [
-      { type: 'text', text: 'ต่ออายุใบไหนไปแล้วบ้างครับ', weight: 'bold', size: 'md', wrap: true },
+      headRow('ต่ออายุใบไหนไปแล้วบ้างครับ', '19-calendar'),
       { type: 'text', text: 'กดทีละใบได้เลย ไม่ต้องต่อครบทุกใบก็ได้', size: 'xs', color: MUTED, wrap: true },
       { type: 'separator', margin: 'md' },
       ...rows,
@@ -893,15 +962,26 @@ export function nearbyPlaces(places: Array<{ label: string; url: string }>): Lin
 }
 
 export function notADocument(): LineMessage[] {
-  return [
-    text(
-      'อันนี้ผมอ่านไม่ออกครับ 😅\n' +
-        'ถ่ายใหม่ให้เห็นวันหมดอายุชัด ๆ ได้ไหมครับ\n\n' +
-        'หรือพิมพ์บอกผมตรง ๆ ก็ได้ เช่น\n' +
-        '"ภาษีรถ 1กก 1234 หมด 31/12/69"',
-      chips([{ label: 'ถ่ายใหม่', camera: true, icon: 'camera' }])
-    ),
-  ];
+  /**
+   * ใช้การ์ดเพราะจังหวะนี้ผู้ใช้เพิ่งทำอะไรแล้วไม่สำเร็จ
+   * มาสคอตท่างงบอกว่า "ระบบอ่านไม่ออก" ไม่ใช่ "คุณทำผิด"
+   * ซึ่งเป็นคนละความรู้สึกกันมาก สำหรับคนที่กำลังจะเลิกใช้
+   */
+  const card = bubble(
+    [
+      headRow('อันนี้ผมอ่านไม่ออกครับ', '15-confused'),
+      { type: 'text', text: 'ถ่ายใหม่ให้เห็นวันหมดอายุชัด ๆ ได้ไหมครับ', size: 'sm', wrap: true },
+      { type: 'separator', margin: 'md' },
+      {
+        type: 'text', margin: 'md', size: 'sm', wrap: true, color: MUTED,
+        text: 'หรือพิมพ์บอกผมตรง ๆ ก็ได้ เช่น\n"ภาษีรถ 1กก 1234 หมด 31/12/69"',
+      },
+    ],
+    undefined,
+    'อ่านรูปไม่ออก'
+  );
+  card.quickReply = chips([{ label: 'ถ่ายใหม่', camera: true, icon: 'camera' }]);
+  return [card];
 }
 
 export function confirmDelete(docCount: number): LineMessage[] {

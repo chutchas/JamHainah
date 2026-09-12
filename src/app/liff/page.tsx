@@ -395,7 +395,11 @@ export default function LiffPage() {
 
       <div className="card">
         {docs.length === 0 ? (
-          <div className="empty">ยังไม่มีเอกสารครับ<br />ส่งรูปเอกสารเข้าแชทได้เลย</div>
+          <div className="empty">
+            {/* หน้าว่างเปล่าคือหน้าที่คนเห็นเป็นหน้าแรกเสมอ ทำให้มันไม่เงียบเกินไป */}
+            <img src="/mascot/14-shrug.png" alt="" width={120} height={120} />
+            ยังไม่มีเอกสารครับ<br />ส่งรูปเอกสารเข้าแชทได้เลย
+          </div>
         ) : (
           docs.map((d) => (
             <div className="item" key={d.id}>
