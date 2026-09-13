@@ -281,3 +281,12 @@ html, body {
   background: var(--warn-wash); color: var(--warn); font-size: 13px; font-weight: 600;
   border-radius: 10px; padding: 10px 12px; margin: 8px 0;
 }
+
+/* ป้ายบอกว่านี่คือหน้าหลังบ้าน — กันเผลอเปิดโชว์ตอนสาธิตให้คนอื่นดู */
+.hero-bar .tag {
+  font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--warn); background: var(--warn-wash);
+  border-radius: 999px; padding: 3px 9px; flex: none;
+}
+/* หน้าหลังบ้านไม่มีหัวข้อ h1 ในเนื้อหา หัวข้อแรกจึงไม่ต้องเว้นบนเยอะ */
+.admin h2:first-of-type { margin-top: 14px; }

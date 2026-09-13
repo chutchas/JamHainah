@@ -35,6 +35,12 @@ function asset(path: string): string | null {
   return env.baseUrl ? `${env.baseUrl}/${path}` : null;
 }
 const mascot = (name: string) => asset(`mascot/${name}.png`);
+/**
+ * ลิงก์หลังบ้าน — ใส่ท้ายข้อความที่ส่งหาเจ้าของระบบเท่านั้น
+ * มีลิงก์อยู่ตรงที่เขากำลังอ่านอยู่แล้ว ดีกว่าต้องไปหาเองในเบราว์เซอร์
+ * (และเป็นเหตุผลว่าทำไมไม่ต้องทำ rich menu แยกสำหรับ admin)
+ */
+const adminUrl = () => asset('admin');
 /** ไอคอนประเภทเอกสาร — เส้นสีเดียวกับไอคอนปุ่ม แทน emoji ของระบบที่สีจัดจนแย่งสายตา */
 const docIcon = (typeKey: string) => asset(`icons/doc/${typeKey}.png`);
 
@@ -1484,6 +1490,8 @@ export function cronReport(s: {
     `ส่งไม่ออก ${s.failed} คน`,
     `ค่าข้อความ ${s.estimated_cost_thb} บาท`,
   ];
+  const url = adminUrl();
+  if (url) lines.push('', url);
   return [text(lines.join('\n'))];
 }
 
@@ -1535,6 +1543,8 @@ export function leadAlert(args: {
   ];
   if (args.expiry) lines.push(`หมดอายุ ${formatThai(args.expiry)} (${remainingValue(todayISO(), args.expiry)})`);
   lines.push(args.lineUserId);
+  const url = adminUrl();
+  if (url) lines.push('', url);
   return [text(lines.join('\n'))];
 }
 

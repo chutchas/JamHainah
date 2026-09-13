@@ -46,6 +46,29 @@ interface Summary {
   leads: Lead[];
 }
 
+/**
+ * หัวหน้าเว็บชุดเดียวกับ "เอกสารของฉัน" แต่ติดป้ายว่าหลังบ้าน
+ *
+ * หน้านี้เปิดในแอป LINE ซึ่งไม่มีแถบที่อยู่เว็บให้ดู ถ้าหน้าตาเปล่า ๆ
+ * จะแยกไม่ออกว่านี่คือหน้าของเรา หรือหลุดไปเว็บไหนแล้ว
+ * และป้าย "หลังบ้าน" ต้องชัด เพราะเราไม่อยากเผลอโชว์หน้านี้ตอนสาธิตให้คนอื่นดู
+ */
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="wrap legal admin">
+      <header className="hero">
+        <div className="hero-img" role="presentation" />
+        <div className="hero-bar">
+          <img className="logo" src="/brand/logo.png" alt="" width={44} height={44} />
+          <h1>หลังบ้าน</h1>
+          <span className="tag">admin</span>
+        </div>
+      </header>
+      {children}
+    </div>
+  );
+}
+
 export default function Admin() {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
@@ -90,15 +113,8 @@ export default function Admin() {
     return () => { cancelled = true; };
   }, []);
 
-  if (state === 'loading') return <main className="wrap legal"><p>กำลังโหลด…</p></main>;
-  if (state === 'error' || !data) {
-    return (
-      <main className="wrap legal">
-        <h1>หลังบ้าน</h1>
-        <p>{message}</p>
-      </main>
-    );
-  }
+  if (state === 'loading') return <Shell><p>กำลังโหลด…</p></Shell>;
+  if (state === 'error' || !data) return <Shell><p className="warn">{message}</p></Shell>;
 
   const { overview, reminders, reading, leads } = data;
   const cron = reminders.lastCron;
@@ -106,8 +122,7 @@ export default function Admin() {
   const cronStale = cronAt ? Date.now() - cronAt.getTime() > 26 * 3600_000 : true;
 
   return (
-    <main className="wrap legal admin">
-      <h1>หลังบ้าน</h1>
+    <Shell>
       <p className="note left">ข้อมูล ณ {new Date().toLocaleString('th-TH')}</p>
 
       <h2>งานเข้า ({leads.length} ครั้งใน 30 วัน)</h2>
@@ -198,6 +213,6 @@ export default function Admin() {
       <p className="note left">
         หน้านี้อ่านอย่างเดียว การแก้ข้อมูลทำที่ Supabase — ของที่แก้ได้จากมือถือ คือของที่แก้ผิดได้จากมือถือ
       </p>
-    </main>
+    </Shell>
   );
 }
