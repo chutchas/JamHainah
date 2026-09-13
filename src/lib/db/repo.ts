@@ -367,6 +367,29 @@ export async function track(name: string, lineUserId?: string | null, props: Rec
   }
 }
 
+/* ---------------- เพดานการใช้ AI ---------------- */
+
+/**
+ * นับจำนวนครั้งที่เรายิงเข้า OpenAI ให้ผู้ใช้คนนี้ใน 24 ชั่วโมงที่ผ่านมา
+ *
+ * ทำไมต้องมี: ทุกครั้งที่อ่านรูปหนึ่งใบ เราจ่ายเงินจริง และไม่มีอะไรกั้น
+ * คนเดียวเปิดอัลบั้มแล้วส่งรวดร้อยใบ ก็จ่ายจริงร้อยครั้งภายในนาทีเดียว
+ * ไม่ว่าจะตั้งใจแกล้งหรือแค่เลือกรูปพลาด
+ *
+ * นับจาก events แทนการทำตารางใหม่ เพราะ track() บันทึกทุกครั้งอยู่แล้ว
+ * และมี index (line_user_id, created_at desc) รองรับการนับแบบนี้พอดี
+ */
+export async function countAiCalls(lineUserId: string, hours = 24): Promise<number> {
+  const since = new Date(Date.now() - hours * 3600_000).toISOString();
+  const { count } = await db()
+    .from('events')
+    .select('id', { count: 'exact', head: true })
+    .eq('line_user_id', lineUserId)
+    .eq('name', 'ai_call')
+    .gte('created_at', since);
+  return count ?? 0;
+}
+
 /* ---------------- PDPA ---------------- */
 
 export async function hardDeleteUser(lineUserId: string) {

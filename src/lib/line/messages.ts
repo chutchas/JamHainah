@@ -1451,6 +1451,63 @@ export function cancelled(): LineMessage[] {
   return [text('ยกเลิกแล้วครับ', chips([{ label: LIST_NAME, liff: true, icon: 'doc' }]))];
 }
 
+/**
+ * รายงานหลัง cron ทุกรอบ — ส่งหาเจ้าของระบบ ไม่ใช่ลูกค้า
+ *
+ * ทำไมต้องส่งทุกวันแม้ไม่มีอะไรผิด:
+ *   ถ้าส่งเฉพาะตอนพัง "เงียบ" จะมีสองความหมาย — ปกติดี กับ cron ตายไปแล้ว
+ *   แยกไม่ออกจนกว่าจะมีลูกค้าโดนค่าปรับแล้วมาบ่น ซึ่งสายเกินไปสำหรับสินค้าที่ขายว่า "จำให้"
+ *   วันละหนึ่งข้อความ (฿0.06) ถูกกว่าการไม่รู้ตัวมาก
+ *
+ * เป็นข้อความล้วนโดยตั้งใจ — notification บนหน้า lock screen แสดงข้อความเต็ม
+ * เจ้าของระบบจะได้อ่านจบโดยไม่ต้องเปิดแอป
+ */
+export function cronReport(s: {
+  today: ISODate;
+  queued: number;
+  skipped: number;
+  users: number;
+  messages: number;
+  failed: number;
+  estimated_cost_thb: number;
+  error?: string;
+}): LineMessage[] {
+  if (s.error) {
+    return [text(`cron ล้ม ${formatThai(s.today)}\n${s.error.slice(0, 300)}`)];
+  }
+  const lines = [
+    `cron ${formatThai(s.today)} — ${s.failed > 0 ? 'มีที่ส่งไม่ออก' : 'ปกติ'}`,
+    `คิววันนี้ ${s.queued} · ข้ามไป ${s.skipped}`,
+    `ส่งจริง ${s.messages} ข้อความ · ${s.users} คน`,
+    `ส่งไม่ออก ${s.failed} คน`,
+    `ค่าข้อความ ${s.estimated_cost_thb} บาท`,
+  ];
+  return [text(lines.join('\n'))];
+}
+
+/**
+ * ใช้เกินเพดานของวัน
+ *
+ * ไม่ใช่การลงโทษ — เอกสารที่ต้องจำมีไม่กี่ใบต่อคน ใครส่งเป็นร้อยใบในวันเดียว
+ * คือเคสที่ผิดปกติ และคนที่จ่ายค่าอ่านคือเรา
+ *
+ * บอกให้ชัดว่ายังพิมพ์วันหมดอายุเองได้ (ทางนั้นไม่ใช้โมเดลถ้าเขียนวันที่มาตรง ๆ)
+ * ปิดประตูทั้งบานเมื่อไหร่ คนที่มีเอกสารด่วนจริงจะไม่มีทางไปต่อเลย
+ */
+export function dailyLimit(): LineMessage[] {
+  return [
+    text(
+      'วันนี้ผมอ่านรูปให้ครบโควตาแล้วครับ\n' +
+        'พรุ่งนี้ส่งรูปมาได้ใหม่เลย\n\n' +
+        'ถ้าด่วน พิมพ์บอกได้ครับ เช่น "วีซ่า 12/10/70"',
+      chips([
+        { label: LIST_NAME, liff: true, icon: 'doc' },
+        { label: 'คุยกับคน', data: pb('human'), icon: 'chat' },
+      ])
+    ),
+  ];
+}
+
 export function fallback(): LineMessage[] {
   return [
     text(

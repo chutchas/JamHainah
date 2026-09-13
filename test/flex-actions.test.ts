@@ -71,6 +71,7 @@ function everyMessage(): M.LineMessage[] {
     ...M.toHuman(),
     ...M.listLink('https://liff.line.me/x'),
     ...M.fallback(),
+    ...M.dailyLimit(),
     ...M.later(),
     ...M.cancelled(),
     ...M.hiccup(),
@@ -93,6 +94,36 @@ test('ห้ามมีข้อความเขียนดิบ ๆ อย
     const raw = [...src.matchAll(/type:\s*'text'\s*,\s*text:/g)];
     assert.equal(raw.length, 0, `${f} สร้างข้อความเอง ${raw.length} แห่ง — ย้ายไป messages.ts`);
   }
+});
+
+/**
+ * รายงานหลัง cron ไม่ได้อยู่ใน everyMessage() เพราะมันไม่ใช่ข้อความของลูกค้า
+ * มันมีวันที่อยู่ในข้อความล้วนโดยตั้งใจ — เจ้าของระบบต้องอ่านจบจากหน้า lock screen
+ * แต่กฎเรื่อง emoji ยังต้องใช้ เพราะมันคือข้อความที่เราส่งออกไปเหมือนกัน
+ */
+test('รายงาน cron ต้องบอกได้ว่าปกติหรือพัง และไม่มี emoji ระบบ', () => {
+  const ok = M.cronReport({
+    today: '2026-11-15', queued: 12, skipped: 2, users: 5, messages: 6,
+    failed: 0, estimated_cost_thb: 0.36,
+  }) as any[];
+  assert.match(ok[0].text, /ปกติ/);
+  assert.match(ok[0].text, /0\.36 บาท/);
+
+  const bad = M.cronReport({
+    today: '2026-11-15', queued: 12, skipped: 2, users: 5, messages: 6,
+    failed: 3, estimated_cost_thb: 0.36,
+  }) as any[];
+  assert.match(bad[0].text, /ส่งไม่ออก/);
+
+  const crashed = M.cronReport({
+    today: '2026-11-15', queued: 0, skipped: 0, users: 0, messages: 0,
+    failed: 0, estimated_cost_thb: 0, error: 'cron select: timeout',
+  }) as any[];
+  assert.match(crashed[0].text, /cron ล้ม/);
+  assert.match(crashed[0].text, /timeout/);
+
+  const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
+  for (const m of [...ok, ...bad, ...crashed]) assert.ok(!EMOJI.test(JSON.stringify(m)));
 });
 
 function quickItems(msg: any): any[] {

@@ -18,6 +18,29 @@ import * as repo from '@/lib/db/repo';
 type Ev = Record<string, any>;
 
 /**
+ * เพดานการเรียก AI ต่อคนต่อวัน
+ *
+ * 30 ครั้งคือเยอะกว่าที่คนใช้จริงมาก (คนหนึ่งมีเอกสารราว 3-6 ใบ และส่งครั้งเดียวจบ)
+ * แต่ต่ำพอที่ค่าเสียหายจากคนที่ส่งรัวจะจบที่หลักสิบบาท ไม่ใช่หลักพัน
+ *
+ * นี่คือเพดานรายคน ไม่ใช่เพดานรายเดือนของทั้งระบบ —
+ * เพดานเงินจริงต้องตั้งที่ฝั่ง OpenAI อีกชั้น เพราะคนละร้อยคนก็ยังรวมกันได้เยอะ
+ */
+const AI_CALLS_PER_DAY = 30;
+
+/**
+ * ยังอ่านให้ได้อีกไหม — ถ้าเกินเพดานแล้วตอบไปเลย ไม่ต้องเสียเงินอ่าน
+ * คืน true เมื่อ "ตอบไปแล้ว" เพื่อให้ตัวเรียกหยุดทันที
+ */
+async function overBudget(ev: Ev, userId: string): Promise<boolean> {
+  const used = await repo.countAiCalls(userId);
+  if (used < AI_CALLS_PER_DAY) return false;
+  await repo.track('ai_limit_hit', userId, { used });
+  await reply(ev.replyToken, M.dailyLimit());
+  return true;
+}
+
+/**
  * ใบที่ยังไม่ได้กด "ถูกต้อง" ในชุดเดียวกับใบล่าสุด
  *
  * ทุกคำตอบที่มี quick reply ต้องพกปุ่มของใบพวกนี้ไปด้วย เพราะ LINE
@@ -132,8 +155,10 @@ async function onMessage(ev: Ev, userId: string) {
      * ไม่มีเอกสารอยู่ในมือตอนนั้น สั้นกว่าการกดปุ่มแล้วเลื่อนปฏิทินหลายจังหวะ
      */
     if (t.length >= 4) {
+      if (await overBudget(ev, userId)) return;
       await showLoading(userId, 10);
       try {
+        await repo.track('ai_call', userId, { kind: 'text' });
         const fromText = await extractFromText(t, today);
         if (fromText.isDocument && (fromText.docTypeKey || fromText.expiryDate)) {
           const pendingNow = await repo.getPending(userId);
@@ -193,6 +218,7 @@ async function onLocation(ev: Ev, userId: string, msg: Record<string, any>) {
 
 async function onImage(ev: Ev, userId: string, messageId: string) {
   const today = todayInBangkok();
+  if (await overBudget(ev, userId)) return;
   const pending = await repo.getPending(userId);
 
   await showLoading(userId, 25);
@@ -200,6 +226,7 @@ async function onImage(ev: Ev, userId: string, messageId: string) {
   let extraction;
   try {
     const buf = await getMessageContent(messageId);
+    await repo.track('ai_call', userId, { kind: 'ocr' });
     extraction = await ocr().extract(buf, 'image/jpeg');
   } catch (err) {
     await repo.track('ocr_error', userId, { message: String(err) });
@@ -318,9 +345,15 @@ async function onImageBatch(events: Ev[], userId: string) {
   const saved: M.ExtractedDoc[] = [];
   const skipped: string[] = [];
 
+  let budget = AI_CALLS_PER_DAY - (await repo.countAiCalls(userId));
+
   for (const ev of events) {
+    // นับใบต่อใบ — ส่งมาสิบใบตอนเหลือโควตาสองใบ ก็ต้องอ่านแค่สองใบ
+    if (budget <= 0) { skipped.push('เกินโควตาวันนี้'); continue; }
+    budget -= 1;
     try {
       const buf = await getMessageContent(ev.message.id);
+      await repo.track('ai_call', userId, { kind: 'ocr', batch: true });
       const extraction = await ocr().extract(buf, 'image/jpeg');
       const typeKey = extraction.docTypeKey;
 
@@ -351,6 +384,8 @@ async function onImageBatch(events: Ev[], userId: string) {
   }
 
   const token = events[0].replyToken;
+  // โควตาหมดตั้งแต่ใบแรก — ไม่ใช่ "รูปนี้ไม่ใช่เอกสาร" คนละเรื่องกันคนละคำตอบ
+  if (saved.length === 0 && budget <= 0) return reply(token, M.dailyLimit());
   if (saved.length === 0) return reply(token, M.notADocument());
 
   const msgs = M.confirmExtractedMany(saved, today);

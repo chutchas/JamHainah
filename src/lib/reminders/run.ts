@@ -15,8 +15,9 @@
  */
 import { db } from '@/lib/db/client';
 import { push } from '@/lib/line/client';
-import { upcomingReminder, dueReminder, type ReminderItem } from '@/lib/line/messages';
+import { upcomingReminder, dueReminder, cronReport, type ReminderItem } from '@/lib/line/messages';
 import { todayInBangkok } from '@/lib/domain/thaiDate';
+import { env } from '@/lib/env';
 import { track } from '@/lib/db/repo';
 import { loadRenewActions } from '@/lib/domain/renewActions';
 
@@ -34,7 +35,39 @@ interface QueueRow {
   users: { unfollowed_at: string | null; deleted_at: string | null } | null;
 }
 
+/**
+ * บอกเจ้าของระบบว่ารอบนี้เป็นยังไง
+ *
+ * ห้ามให้การส่งรายงานทำให้รอบเตือนล้ม — งานหลักจบไปแล้วตอนที่ถึงบรรทัดนี้
+ */
+async function report(summary: Parameters<typeof cronReport>[0]) {
+  const to = env.adminUserId;
+  if (!to) return;
+  try {
+    await push(to, cronReport(summary));
+  } catch (err) {
+    console.error('[cron] report failed', err);
+  }
+}
+
 export async function runReminders() {
+  try {
+    return await runOnce();
+  } catch (err) {
+    /**
+     * พังกลางทาง = ลูกค้าบางคนอาจไม่ได้รับการเตือนวันนี้
+     * เป็นเรื่องที่ต้องรู้ภายในนาทีนั้น ไม่ใช่ตอนสิ้นเดือน
+     */
+    const message = err instanceof Error ? err.message : String(err);
+    await report({
+      today: todayInBangkok(), queued: 0, skipped: 0, users: 0, messages: 0,
+      failed: 0, estimated_cost_thb: 0, error: message,
+    });
+    throw err;
+  }
+}
+
+async function runOnce() {
   const supabase = db();
   const today = todayInBangkok();
   // อ่านครั้งเดียวต่อรอบ ไม่ใช่ทุกผู้ใช้
@@ -146,6 +179,7 @@ export async function runReminders() {
     estimated_cost_thb: Number((sentMessages * 0.06).toFixed(2)),
   };
   await track('cron_run', null, summary);
+  await report(summary);
 
   // ล้างรูปที่เลยกำหนดเก็บ — ทำท้ายรอบนี้แทนการกิน cron slot ไปอีกอัน
   // (Vercel Hobby ให้แค่ 2 slot และเราต้องใช้กับรอบเตือนทั้งคู่)

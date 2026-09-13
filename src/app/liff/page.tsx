@@ -520,7 +520,11 @@ export default function LiffPage() {
         <button className="btn danger" onClick={() => setAskWipe(true)} disabled={busy || docs.length === 0}>
           ลบข้อมูลของฉันทั้งหมด
         </button>
-        <p className="note">เราไม่เก็บรูปเอกสารของคุณ — อ่านวันหมดอายุแล้วทิ้งทันที</p>
+        <p className="note">
+          เราไม่เก็บรูปเอกสารของคุณ — อ่านวันหมดอายุแล้วทิ้งทันที
+          {' · '}
+          <a href="/privacy" target="_blank" rel="noreferrer">นโยบายความเป็นส่วนตัว</a>
+        </p>
       </div>
 
       {/*

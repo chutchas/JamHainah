@@ -234,3 +234,18 @@ html, body {
 @media (min-height: 620px) {
   .sheet { align-items: center; }
 }
+
+/* ------------------------------------------------------------
+   หน้าเอกสารอ่านอย่างเดียว (นโยบายความเป็นส่วนตัว)
+   เปิดจากนอกแอป LINE ได้ จึงต้องอ่านรู้เรื่องโดยไม่มีส่วนหัวของ LIFF
+   ------------------------------------------------------------ */
+/* ชื่อคลาสต้องไม่ใช่ .doc — อันนั้นเป็นแถวเอกสารในหน้ารายการ (grid) ชนกันแล้วหน้าเพี้ยนทั้งหน้า */
+.legal { padding-bottom: 48px; }
+.legal h1 { font-size: 22px; font-weight: 700; margin: 24px 0 4px; }
+.legal h2 { font-size: 16px; font-weight: 700; margin: 26px 0 8px; color: var(--ink); }
+.legal p { margin: 10px 0; color: var(--ink-2); }
+.legal ul { margin: 10px 0; padding-left: 20px; color: var(--ink-2); }
+.legal li { margin: 7px 0; }
+.legal b { color: var(--ink); font-weight: 600; }
+.legal a { color: var(--green); }
+.note.left { text-align: left; margin: 4px 0 0; }
