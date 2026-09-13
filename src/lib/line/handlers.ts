@@ -30,6 +30,17 @@ type Ev = Record<string, any>;
 const AI_CALLS_PER_DAY = 30;
 
 /**
+ * ประเภทเอกสาร -> บริการที่เรารับทำ
+ *
+ * orders.service มีแค่สี่ค่า ไม่ใช่ทุกประเภทเอกสาร เพราะเรารับทำแค่บางอย่าง
+ * ของที่ไม่ได้รับทำตรง ๆ ลงเป็น other แล้วค่อยคุยกันในงานนั้น
+ */
+function orderService(docTypeKey?: string | null): string {
+  const known = ['cmi', 'vehicle_tax', 'motor_insurance'];
+  return docTypeKey && known.includes(docTypeKey) ? docTypeKey : 'other';
+}
+
+/**
  * ยังอ่านให้ได้อีกไหม — ถ้าเกินเพดานแล้วตอบไปเลย ไม่ต้องเสียเงินอ่าน
  * คืน true เมื่อ "ตอบไปแล้ว" เพื่อให้ตัวเรียกหยุดทันที
  */
@@ -668,6 +679,15 @@ async function onPostback(ev: Ev, userId: string) {
     case 'upsell': {
       const doc = docId ? await repo.getDocument(docId) : null;
       await repo.track('upsell_clicked', userId, { typeKey: doc?.doc_type ?? null, documentId: docId });
+      /**
+       * เปิดงานในคิวจริง ไม่ใช่แค่บันทึก event
+       * event บอกได้อย่างเดียวว่ามีคนสนใจ — ไม่มีสถานะ ไม่มีคนรับผิดชอบ
+       * ไม่มีที่จดว่าคุยอะไรไปแล้ว เอาไปทำงานต่อไม่ได้
+       */
+      await repo.openOrder({
+        lineUserId: userId, documentId: docId ?? null,
+        service: orderService(doc?.doc_type), via: 'chat',
+      });
       /**
        * แจ้งเจ้าของระบบทันที ไม่ใช่รอให้ไปเปิดฐานข้อมูลเอง
        * คนที่กดปุ่มนี้กำลังรอคำตอบจากคนจริง ๆ อยู่

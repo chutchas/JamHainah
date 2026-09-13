@@ -10,9 +10,9 @@
  * ปลอดภัยกว่าการเปิดให้ทุกคนตอนที่ยังไม่ได้ตั้งค่า
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateLiff } from '@/lib/line/liffAuth';
+import { requireAdmin } from '@/lib/admin/auth';
+import * as repo from '@/lib/db/repo';
 import { db } from '@/lib/db/client';
-import { env } from '@/lib/env';
 import { todayInBangkok, formatThai } from '@/lib/domain/thaiDate';
 import { docType } from '@/lib/domain/docTypes';
 
@@ -29,11 +29,8 @@ interface EventRow {
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000).toISOString();
 
 export async function GET(req: NextRequest) {
-  const userId = await authenticateLiff(req);
-  if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  if (!env.adminUserIds.includes(userId)) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-  }
+  const who = await requireAdmin(req);
+  if (!who) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   const supabase = db();
   const today = todayInBangkok();
@@ -105,6 +102,25 @@ export async function GET(req: NextRequest) {
   // รอบ cron ล่าสุด — ตอบคำถามว่า "เมื่อเช้ามันทำงานไหม"
   const lastCron = events.find((e) => e.name === 'cron_run');
 
+  // คิวงานจริง — ของที่ต้องลงมือทำ ไม่ใช่ตัวเลขไว้ดู
+  const [orderRows, adminRows] = await Promise.all([repo.listOrders(30), repo.listAdmins()]);
+  const orderUserIds = [...new Set(orderRows.map((o) => o.line_user_id))];
+  const { data: orderNames } = orderUserIds.length
+    ? await supabase.from('users').select('line_user_id, display_name').in('line_user_id', orderUserIds)
+    : { data: [] as Array<{ line_user_id: string; display_name: string | null }> };
+  const orderNameBy = new Map((orderNames ?? []).map((r) => [r.line_user_id, r.display_name]));
+
+  const orders = orderRows.map((o) => ({
+    id: o.id,
+    status: o.status,
+    service: docType(o.service).label,
+    name: orderNameBy.get(o.line_user_id) ?? null,
+    lineUserId: o.line_user_id,
+    atThai: formatThai(o.created_at.slice(0, 10)),
+    assignee: o.assignee,
+    note: o.note,
+  }));
+
   return NextResponse.json({
     today,
     overview: {
@@ -127,6 +143,14 @@ export async function GET(req: NextRequest) {
       aiCalls: tally['ai_call'] ?? 0,
     },
     leads,
+    orders,
+    team: adminRows.map((a) => ({
+      lineUserId: a.line_user_id,
+      name: a.display_name,
+      role: a.role,
+      disabled: a.disabled_at !== null,
+    })),
+    me: { userId: who.userId, role: who.role, bootstrap: who.bootstrap },
     tally,
   });
 }

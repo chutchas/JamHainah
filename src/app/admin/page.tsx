@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 /**
  * หลังบ้าน — อ่านอย่างเดียว
@@ -29,6 +29,24 @@ interface Lead {
   started: boolean;
 }
 
+interface Order {
+  id: string;
+  status: 'new' | 'accepted' | 'in_progress' | 'done' | 'cancelled';
+  service: string;
+  name: string | null;
+  lineUserId: string;
+  atThai: string;
+  assignee: string | null;
+  note: string | null;
+}
+
+interface Member {
+  lineUserId: string;
+  name: string | null;
+  role: 'owner' | 'staff';
+  disabled: boolean;
+}
+
 interface Summary {
   today: string;
   overview: {
@@ -44,6 +62,9 @@ interface Summary {
     missed: number; notDocument: number; ocrError: number; limitHit: number; aiCalls: number;
   };
   leads: Lead[];
+  orders: Order[];
+  team: Member[];
+  me: { userId: string; role: 'owner' | 'staff'; bootstrap: boolean };
 }
 
 /**
@@ -73,6 +94,34 @@ export default function Admin() {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
   const [data, setData] = useState<Summary | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [newId, setNewId] = useState('');
+
+  /**
+   * ทุกการเขียนโหลดข้อมูลใหม่ทั้งก้อน ไม่แก้ state เอาเอง
+   *
+   * หน้านี้มีคนใช้พร้อมกันได้ตั้งแต่วันแรกที่มีทีม การเดาสถานะฝั่งหน้าจอ
+   * จะทำให้สองคนเห็นคิวไม่ตรงกัน แล้วรับงานชิ้นเดียวกันซ้อน
+   */
+  const act = useCallback(async (url: string, body: unknown) => {
+    if (!token) return;
+    setBusy(true);
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-liff-id-token': token },
+        body: JSON.stringify(body),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) { setMessage(out.error ?? `ทำรายการไม่สำเร็จ (${res.status})`); return; }
+      setMessage('');
+      const fresh = await fetch('/api/admin/summary', { headers: { 'x-liff-id-token': token } });
+      if (fresh.ok) setData(await fresh.json());
+    } finally {
+      setBusy(false);
+    }
+  }, [token]);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +144,7 @@ export default function Admin() {
         if (!window.liff.isLoggedIn()) { window.liff.login(); return; }
 
         const idToken = window.liff.getIDToken();
+        setToken(idToken);
         const res = await fetch('/api/admin/summary', { headers: { 'x-liff-id-token': idToken } });
         if (res.status === 403) throw new Error('บัญชีนี้ไม่ใช่ผู้ดูแลระบบ');
         if (!res.ok) throw new Error(`โหลดข้อมูลไม่สำเร็จ (${res.status})`);
@@ -116,7 +166,17 @@ export default function Admin() {
   if (state === 'loading') return <Shell><p>กำลังโหลด…</p></Shell>;
   if (state === 'error' || !data) return <Shell><p className="warn">{message}</p></Shell>;
 
-  const { overview, reminders, reading, leads } = data;
+  const { overview, reminders, reading, leads, orders, team, me } = data;
+  const open = orders.filter((o) => ['new', 'accepted', 'in_progress'].includes(o.status));
+  const STATUS_TH: Record<Order['status'], string> = {
+    new: 'ใหม่', accepted: 'รับงานแล้ว', in_progress: 'กำลังทำ', done: 'เสร็จ', cancelled: 'ยกเลิก',
+  };
+  // ขั้นถัดไปของแต่ละสถานะ — ปุ่มที่เห็นต้องเป็นปุ่มที่กดแล้วมีความหมายตอนนี้
+  const NEXT: Partial<Record<Order['status'], Array<Order['status']>>> = {
+    new: ['accepted', 'cancelled'],
+    accepted: ['in_progress', 'cancelled'],
+    in_progress: ['done', 'cancelled'],
+  };
   const cron = reminders.lastCron;
   const cronAt = cron ? new Date(cron.at) : null;
   const cronStale = cronAt ? Date.now() - cronAt.getTime() > 26 * 3600_000 : true;
@@ -124,6 +184,39 @@ export default function Admin() {
   return (
     <Shell>
       <p className="note left">ข้อมูล ณ {new Date().toLocaleString('th-TH')}</p>
+
+      {message && <p className="warn">{message}</p>}
+
+      <h2>คิวงาน ({open.length} ชิ้นที่ยังไม่จบ)</h2>
+      {open.length === 0 ? (
+        <p>ไม่มีงานค้างครับ</p>
+      ) : (
+        <div className="rows">
+          {open.map((o) => (
+            <div className="lead" key={o.id}>
+              <div className="lead-top">
+                <b>{o.name ?? 'ผู้ใช้'}</b>
+                <span className={`pill ${o.status}`}>{STATUS_TH[o.status]}</span>
+              </div>
+              <div className="muted">{o.service} · เปิดงาน {o.atThai}</div>
+              {o.note && <div className="muted">{o.note}</div>}
+              <div className="acts">
+                {(NEXT[o.status] ?? []).map((next) => (
+                  <button
+                    key={next}
+                    className={`btn ${next === 'cancelled' ? 'danger' : 'primary'}`}
+                    disabled={busy}
+                    onClick={() => act('/api/admin/order', { id: o.id, status: next })}
+                  >
+                    {STATUS_TH[next]}
+                  </button>
+                ))}
+              </div>
+              <code>{o.lineUserId}</code>
+            </div>
+          ))}
+        </div>
+      )}
 
       <h2>งานเข้า ({leads.length} ครั้งใน 30 วัน)</h2>
       {leads.length === 0 ? (
@@ -210,8 +303,55 @@ export default function Admin() {
         <div className="tile"><span className="n">{overview.unfollowed}</span><span className="l">บล็อก/ลบเพื่อน</span></div>
       </div>
 
+      <h2>ทีม</h2>
+      <div className="rows">
+        {team.length === 0 && <p className="muted">ยังไม่มีใครในตาราง — ตอนนี้เข้าได้ด้วย ADMIN_LINE_USER_ID เท่านั้น</p>}
+        {team.map((m) => (
+          <div className="lead" key={m.lineUserId}>
+            <div className="lead-top">
+              <b>{m.name ?? 'ไม่ระบุชื่อ'}</b>
+              <span className={`pill ${m.disabled ? 'cancelled' : 'accepted'}`}>
+                {m.disabled ? 'ถอดสิทธิ์แล้ว' : m.role}
+              </span>
+            </div>
+            <code>{m.lineUserId}</code>
+            {me.role === 'owner' && !m.disabled && m.lineUserId !== me.userId && (
+              <div className="acts">
+                <button
+                  className="btn danger" disabled={busy}
+                  onClick={() => act('/api/admin/team', { lineUserId: m.lineUserId, disable: true })}
+                >
+                  ถอดสิทธิ์
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {me.role === 'owner' && (
+        <div className="addrow">
+          <input
+            value={newId}
+            onChange={(e) => setNewId(e.target.value)}
+            placeholder="LINE user id ของคนที่จะเพิ่ม (U…)"
+            spellCheck={false}
+          />
+          <button
+            className="btn primary" disabled={busy || newId.trim().length < 10}
+            onClick={() => act('/api/admin/team', { lineUserId: newId.trim(), role: 'staff' }).then(() => setNewId(''))}
+          >
+            เพิ่มเป็น staff
+          </button>
+          <p className="note left">
+            ให้เขาทักบอทก่อนหนึ่งครั้ง แล้วหารหัสได้จากตาราง users — staff ทำงานในคิวได้ แต่แตะสิทธิ์คนอื่นไม่ได้
+          </p>
+        </div>
+      )}
+
       <p className="note left">
-        หน้านี้อ่านอย่างเดียว การแก้ข้อมูลทำที่ Supabase — ของที่แก้ได้จากมือถือ คือของที่แก้ผิดได้จากมือถือ
+        ข้อมูลลูกค้าแก้ที่ Supabase — หน้านี้แก้ได้เฉพาะสถานะงานกับสิทธิ์ของทีม
+        และทุกการเปลี่ยนแปลงถูกบันทึกว่าใครทำ
       </p>
     </Shell>
   );

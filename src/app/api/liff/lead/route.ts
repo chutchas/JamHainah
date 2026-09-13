@@ -33,6 +33,14 @@ export async function POST(req: NextRequest) {
     typeKey: doc.doc_type, documentId, via: 'liff',
   });
 
+  const known = ['cmi', 'vehicle_tax', 'motor_insurance'];
+  await repo.openOrder({
+    lineUserId: userId,
+    documentId,
+    service: known.includes(doc.doc_type) ? doc.doc_type : 'other',
+    via: 'web',
+  });
+
   // งานเข้าต้องดังทันที — ที่เหลือคือความเร็วในการทักกลับ ซึ่งเป็นสินค้าจริงของขาบริการ
   const profile = await getProfile(userId);
   await notifyAdmin(

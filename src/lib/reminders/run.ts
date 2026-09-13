@@ -18,7 +18,7 @@ import { push } from '@/lib/line/client';
 import { upcomingReminder, dueReminder, cronReport, type ReminderItem } from '@/lib/line/messages';
 import { todayInBangkok } from '@/lib/domain/thaiDate';
 import { notifyAdmin } from '@/lib/line/admin';
-import { track } from '@/lib/db/repo';
+import { track, purgeFinishedOrders } from '@/lib/db/repo';
 import { loadRenewActions } from '@/lib/domain/renewActions';
 
 interface QueueRow {
@@ -191,6 +191,17 @@ async function runOnce() {
     }
   } catch (err) {
     console.error('[cron] purge images failed', err);
+  }
+
+  /**
+   * ล้างข้อมูลรถของงานที่ปิดไปแล้วเกิน 7 วัน
+   * ข้อมูลที่ยืมมาทำงานหนึ่งครั้ง ต้องคืนโดยไม่ต้องรอให้ใครสั่ง
+   */
+  try {
+    const purged = await purgeFinishedOrders(today);
+    if (purged > 0) console.log(`[cron] purged vehicle data of ${purged} orders`);
+  } catch (err) {
+    console.error('[cron] purge orders failed', err);
   }
 
   return summary;

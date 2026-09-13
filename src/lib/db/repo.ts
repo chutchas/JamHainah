@@ -390,6 +390,208 @@ export async function countAiCalls(lineUserId: string, hours = 24): Promise<numb
   return count ?? 0;
 }
 
+/* ---------------- ผู้ดูแลระบบ ---------------- */
+
+export interface AdminRow {
+  line_user_id: string;
+  display_name: string | null;
+  role: 'owner' | 'staff';
+  added_by: string | null;
+  note: string | null;
+  created_at: string;
+  disabled_at: string | null;
+}
+
+export async function findAdmin(lineUserId: string): Promise<AdminRow | null> {
+  const { data } = await db()
+    .from('admins').select('*').eq('line_user_id', lineUserId).maybeSingle();
+  return (data as AdminRow) ?? null;
+}
+
+export async function listAdmins(): Promise<AdminRow[]> {
+  const { data } = await db().from('admins').select('*').order('created_at');
+  return (data as AdminRow[]) ?? [];
+}
+
+export async function upsertAdmin(args: {
+  lineUserId: string; role: 'owner' | 'staff'; displayName?: string | null;
+  note?: string | null; addedBy: string;
+}): Promise<AdminRow> {
+  const { data, error } = await db()
+    .from('admins')
+    .upsert({
+      line_user_id: args.lineUserId,
+      role: args.role,
+      display_name: args.displayName ?? null,
+      note: args.note ?? null,
+      added_by: args.addedBy,
+      // เพิ่มคนที่เคยถูกถอดสิทธิ์ = เปิดใช้ใหม่ ไม่ใช่สร้างแถวซ้ำ
+      disabled_at: null,
+    })
+    .select()
+    .single();
+  if (error) throw new Error(`upsertAdmin: ${error.message}`);
+  return data as AdminRow;
+}
+
+/** ถอดสิทธิ์ = ปิด ไม่ใช่ลบ — ประวัติว่าใครเคยทำอะไรต้องยังอ่านออก */
+export async function disableAdmin(lineUserId: string): Promise<void> {
+  const { error } = await db()
+    .from('admins').update({ disabled_at: new Date().toISOString() }).eq('line_user_id', lineUserId);
+  if (error) throw new Error(`disableAdmin: ${error.message}`);
+}
+
+/* ---------------- ร่องรอยว่าใครทำอะไร ---------------- */
+
+/**
+ * ทุกการเขียนของฝั่งหลังบ้านต้องผ่านที่นี่
+ *
+ * เก็บ before/after ทั้งก้อน เพราะตอนที่ต้องใช้จริง เราจะไม่รู้ล่วงหน้า
+ * ว่าต้องดู field ไหน และของที่ไม่ได้เก็บ ย้อนไปเก็บไม่ได้
+ */
+export async function audit(args: {
+  actor: string;
+  action: string;
+  entity?: string | null;
+  before?: unknown;
+  after?: unknown;
+}): Promise<void> {
+  try {
+    await db().from('audit_log').insert({
+      actor: args.actor,
+      action: args.action,
+      entity: args.entity ?? null,
+      before: args.before ?? null,
+      after: args.after ?? null,
+    });
+  } catch (err) {
+    // บันทึกไม่ได้ ต้องไม่ทำให้งานหลักล้ม แต่ต้องดังใน log ให้เห็น
+    console.error('[audit] failed', args.action, err);
+  }
+}
+
+/* ---------------- คิวงาน ---------------- */
+
+export interface OrderRow {
+  id: string;
+  line_user_id: string;
+  document_id: string | null;
+  service: string;
+  status: 'new' | 'accepted' | 'in_progress' | 'done' | 'cancelled';
+  assignee: string | null;
+  price_thb: number | null;
+  paid_at: string | null;
+  note: string | null;
+  vehicle: Record<string, unknown>;
+  purge_after: string | null;
+  purged_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const ORDER_STATUSES = ['new', 'accepted', 'in_progress', 'done', 'cancelled'] as const;
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+/**
+ * งานหนึ่งชิ้นต่อการกดหนึ่งครั้ง — แต่ถ้ายังมีงานเปิดค้างของเอกสารใบเดิม
+ * ให้ใช้ใบเดิม ไม่ต้องเปิดใหม่ (ลูกค้ากดซ้ำเพราะไม่แน่ใจว่ากดติดไหม)
+ */
+export async function openOrder(args: {
+  lineUserId: string; documentId?: string | null; service: string; via: string;
+}): Promise<OrderRow> {
+  if (args.documentId) {
+    const { data: existing } = await db()
+      .from('orders').select('*')
+      .eq('line_user_id', args.lineUserId)
+      .eq('document_id', args.documentId)
+      .in('status', ['new', 'accepted', 'in_progress'])
+      .maybeSingle();
+    if (existing) return existing as OrderRow;
+  }
+
+  const { data, error } = await db()
+    .from('orders')
+    .insert({
+      line_user_id: args.lineUserId,
+      document_id: args.documentId ?? null,
+      service: args.service,
+    })
+    .select()
+    .single();
+  if (error) throw new Error(`openOrder: ${error.message}`);
+
+  const row = data as OrderRow;
+  await db().from('order_events').insert({
+    order_id: row.id, kind: 'created', detail: { via: args.via },
+  });
+  return row;
+}
+
+export async function listOrders(limit = 50): Promise<OrderRow[]> {
+  const { data } = await db()
+    .from('orders').select('*').order('created_at', { ascending: false }).limit(limit);
+  return (data as OrderRow[]) ?? [];
+}
+
+export async function getOrder(id: string): Promise<OrderRow | null> {
+  const { data } = await db().from('orders').select('*').eq('id', id).maybeSingle();
+  return (data as OrderRow) ?? null;
+}
+
+export async function setOrderStatus(args: {
+  id: string; status: OrderStatus; actor: string; note?: string | null;
+}): Promise<OrderRow> {
+  const patch: Record<string, unknown> = { status: args.status, assignee: args.actor };
+  if (args.note !== undefined) patch.note = args.note;
+  /**
+   * งานจบแล้วตั้งเวลาล้างข้อมูลรถ — เก็บเท่าที่ต้องใช้ ลบเมื่องานจบ
+   * เว้น 7 วันไว้เผื่อลูกค้าทักกลับมาถามเรื่องงานที่เพิ่งปิด
+   */
+  if (args.status === 'done' || args.status === 'cancelled') {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    patch.purge_after = d.toISOString().slice(0, 10);
+  }
+
+  const { data, error } = await db()
+    .from('orders').update(patch).eq('id', args.id).select().single();
+  if (error) throw new Error(`setOrderStatus: ${error.message}`);
+
+  await db().from('order_events').insert({
+    order_id: args.id, actor: args.actor, kind: 'status', detail: { status: args.status },
+  });
+  return data as OrderRow;
+}
+
+export async function listOrderEvents(orderId: string) {
+  const { data } = await db()
+    .from('order_events').select('*').eq('order_id', orderId).order('at', { ascending: true });
+  return (data as Array<{ kind: string; actor: string | null; detail: Record<string, unknown>; at: string }>) ?? [];
+}
+
+/**
+ * ล้างข้อมูลรถของงานที่จบแล้ว — เรียกจาก cron รอบเช้า
+ * ข้อมูลที่ยืมมาทำงานหนึ่งครั้ง ต้องคืนโดยไม่ต้องรอให้ใครสั่ง
+ */
+export async function purgeFinishedOrders(today: string): Promise<number> {
+  const { data } = await db()
+    .from('orders')
+    .select('id')
+    .is('purged_at', null)
+    .not('purge_after', 'is', null)
+    .lte('purge_after', today)
+    .limit(500);
+
+  const ids = ((data as Array<{ id: string }>) ?? []).map((r) => r.id);
+  if (ids.length === 0) return 0;
+
+  await db()
+    .from('orders')
+    .update({ vehicle: {}, purged_at: new Date().toISOString() })
+    .in('id', ids);
+  return ids.length;
+}
+
 /* ---------------- PDPA ---------------- */
 
 export async function hardDeleteUser(lineUserId: string) {
