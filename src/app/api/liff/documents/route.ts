@@ -37,10 +37,9 @@ export async function GET(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
   const today = todayInBangkok();
-  const [docs, actionsByType, area, queue] = await Promise.all([
+  const [docs, actionsByType, queue] = await Promise.all([
     repo.listDocuments(userId),
     loadRenewActions(),
-    repo.getUserArea(userId),
     repo.listPendingReminders(userId),
   ]);
 
@@ -63,7 +62,6 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     today,
     /** มีพิกัดแล้วหรือยัง — หน้าเว็บใช้ตัดสินใจว่าจะชวนเปิดตำแหน่งไหม */
-    hasArea: area !== null,
     documents: docs.map((d) => {
       const t = docType(d.doc_type);
       const days = daysBetween(today, d.expiry_date);
@@ -109,7 +107,8 @@ export async function GET(req: NextRequest) {
             // มีพิกัดก็ปักหมุดให้ ไม่มีก็ยังกดได้ — Google Maps ใช้ตำแหน่งของเครื่องเอง
             return [{
               kind: 'map', label: a.label, term: a.searchTerm,
-              url: mapsSearchUrl(a.searchTerm, area?.lat, area?.lng),
+              // พิกัดสดจะถูกเขียนทับที่ฝั่งเบราว์เซอร์ตอนได้สิทธิ์ — ที่นี่ส่งแบบค้นหาล้วน
+              url: mapsSearchUrl(a.searchTerm),
             }];
           }
           return [];

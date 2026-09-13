@@ -76,31 +76,6 @@ export async function setPending(lineUserId: string, pending: PendingState | nul
  * เราต้องการรู้แค่ว่าผู้ใช้กระจุกอยู่โซนไหน เพื่อไปหาร้านแถวนั้นมาเป็นพาร์ทเนอร์
  * ไม่ได้ต้องการรู้ว่าใครอยู่บ้านเลขที่ไหน
  */
-export async function saveUserArea(lineUserId: string, args: {
-  lat: number; lng: number; label?: string | null;
-}) {
-  const round2 = (n: number) => Math.round(n * 100) / 100;
-  await db().from('users').update({
-    area_lat: round2(args.lat),
-    area_lng: round2(args.lng),
-    area_label: args.label ?? null,
-    area_shared_at: new Date().toISOString(),
-  }).eq('line_user_id', lineUserId);
-}
-
-/** พิกัดหยาบที่เคยเก็บไว้ — ใช้ปักหมุดลิงก์แผนที่ให้ตรงขึ้นโดยไม่ต้องถามซ้ำทุกครั้ง */
-export async function getUserArea(
-  lineUserId: string
-): Promise<{ lat: number; lng: number } | null> {
-  const { data } = await db()
-    .from('users')
-    .select('area_lat, area_lng')
-    .eq('line_user_id', lineUserId)
-    .maybeSingle();
-  const r = data as { area_lat: number | null; area_lng: number | null } | null;
-  if (!r || r.area_lat == null || r.area_lng == null) return null;
-  return { lat: Number(r.area_lat), lng: Number(r.area_lng) };
-}
 
 /** จับคู่ผู้ใช้กับร้านที่เขาสแกน QR มา (ภายใน 24 ชม.) */
 export async function attachShopAttribution(lineUserId: string) {

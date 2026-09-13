@@ -17,7 +17,7 @@ import { db } from '@/lib/db/client';
 import { push } from '@/lib/line/client';
 import { upcomingReminder, dueReminder, type ReminderItem } from '@/lib/line/messages';
 import { todayInBangkok } from '@/lib/domain/thaiDate';
-import { track, getUserArea } from '@/lib/db/repo';
+import { track } from '@/lib/db/repo';
 import { loadRenewActions } from '@/lib/domain/renewActions';
 
 interface QueueRow {
@@ -92,8 +92,17 @@ export async function runReminders() {
         const items = bucket.upcoming.map(toItem);
         // พิกัดหยาบที่เขาเคยแชร์ไว้ — ทำให้ลิงก์ "ใกล้ฉัน" ค้นรอบตัวเขาจริง ๆ
         // ไม่มีก็ยังกดได้ แค่ Maps ใช้ตำแหน่งของเครื่องเป็นจุดตั้งต้นแทน
-        const area = await getUserArea(userId);
-        await push(userId, upcomingReminder(items, today, actionsByType, area));
+        /**
+         * ไม่ส่งพิกัดไปกับลิงก์แผนที่
+         *
+         * พิกัดที่เก็บไว้บอกได้แค่ว่าเขาเคยอยู่ตรงไหน ไม่ใช่ตอนนี้อยู่ตรงไหน
+         * คนที่ต้องไปต่อภาษีคือคนที่กำลังเดินทาง — เก็บไว้ตอนอยู่กรุงเทพ
+         * แล้วกดตอนอยู่ชลบุรี ก็ได้ที่ว่าการอำเภอผิดจังหวัด
+         *
+         * ลิงก์แบบ ?api=1&query= ให้ Google Maps ใช้ GPS ของเครื่อง ณ วินาทีที่กด
+         * ซึ่งเป็นสิ่งเดียวที่ตรงกับคำว่า "ใกล้ฉัน" จริง ๆ
+         */
+        await push(userId, upcomingReminder(items, today, actionsByType));
         sentMessages++;
         ok.push(...bucket.upcoming.map((r) => r.id));
       }

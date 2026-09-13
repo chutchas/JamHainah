@@ -6,6 +6,7 @@ import { join } from 'node:path';
 
 import * as M from '../src/lib/line/messages';
 import { DOC_TYPES } from '../src/lib/domain/docTypes';
+import { mapsSearchUrl } from '../src/lib/domain/renewActions';
 
 /**
  * ตั้งก่อนได้เลยแม้ import จะถูกยกขึ้นไปบนสุด
@@ -170,12 +171,26 @@ test('ปุ่ม "ใกล้ฉัน" ต้องค้นหาให้�
     'ไม่มีพิกัด ต้องเป็นลิงก์ค้นหาจริง ไม่ใช่ลิงก์ที่ Google เดาที่ให้'
   );
 
-  // มีพิกัด = ค้นรอบตัวเขา ผลลัพธ์เป็นรายการให้เลือก ไม่ใช่หมุดเดียว
-  const [near] = M.upcomingReminder([items[1]], '2026-11-15', ACTIONS, { lat: 13.82, lng: 100.53 }) as any[];
-  const nearUris = quickItems(near).map((i: any) => i.action.uri).filter(Boolean);
-  assert.ok(nearUris.some((u: string) => u.includes('/@13.82,100.53,')));
   // location action เปิดได้แค่หน้าเลือกสถานที่ของ LINE ซึ่งไม่รับคำค้นของเรา
   assert.ok(!quickItems(card).some((i: any) => i.action.type === 'location'));
+});
+
+/**
+ * บั๊กจริง: แชร์ตำแหน่งไว้ตอนอยู่กรุงเทพ อีกหลายวันต่อมากดปุ่มตอนอยู่ชลบุรี
+ * แล้วได้ที่ว่าการอำเภอแถวกรุงเทพ
+ *
+ * พิกัดที่เก็บไว้ตอบได้แค่ว่าเขาเคยอยู่ตรงไหน แต่ปุ่มนี้ถามว่า "ตอนนี้อยู่ตรงไหน"
+ * ข้อความที่เราส่งออกไปจึงต้องไม่มีพิกัดติดไปเลยสักลิงก์
+ */
+test('ลิงก์แผนที่ในข้อความ ต้องไม่มีพิกัดฝังอยู่', () => {
+  const withCoords = [...JSON.stringify(everyMessage()).matchAll(/\/@[\d.]+,[\d.]+/g)];
+  assert.deepEqual(withCoords.map((m) => m[0]), [], 'ลิงก์ที่มีพิกัดคือลิงก์ที่พาไปที่เก่า');
+});
+
+test('พิกัดที่เพิ่งแชร์มาเดี๋ยวนั้น ใช้ปักหมุดได้', () => {
+  // ต่างกันที่ "เพิ่งแชร์" — อันนี้คือตำแหน่งจริงตอนนี้ ไม่ใช่ของเก่าที่เก็บไว้
+  const url = mapsSearchUrl('ที่ว่าการอำเภอ', 13.82, 100.53);
+  assert.ok(url.includes('/@13.82,100.53,'), 'ควรค้นรอบจุดที่เขาเพิ่งบอก');
 });
 
 test('ยังไม่ถึงรอบต่อ ต้องไม่มีปุ่มต่ออายุ', () => {

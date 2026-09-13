@@ -113,7 +113,6 @@ export default function LiffPage() {
     if (!res.ok) throw new Error(`โหลดรายการไม่สำเร็จ (${res.status})`);
     const data = await res.json();
     setDocs(data.documents ?? []);
-    return data as { hasArea?: boolean };
   }, []);
 
   /**
@@ -131,21 +130,16 @@ export default function LiffPage() {
     );
   }, []);
 
-  const sendArea = useCallback(
-    async (idToken: string, lat: number, lng: number) => {
-      try {
-        const res = await fetch('/api/liff/area', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', 'x-liff-id-token': idToken },
-          body: JSON.stringify({ lat, lng }),
-        });
-        if (!res.ok) return;
-        const saved = await res.json();
-        applyCoords(saved.lat, saved.lng);
-        setAskArea(false);
-      } catch {
-        // ไม่ได้พิกัดก็ยังใช้งานได้ครบ — ปุ่มแผนที่ทำงานโดยไม่ต้องมีพิกัดอยู่แล้ว
-      }
+  /**
+   * พิกัดอยู่ในหน้านี้เท่านั้น ไม่ส่งไปเก็บที่เซิร์ฟเวอร์
+   *
+   * เก็บไว้ก็ใช้ไม่ได้ เพราะพรุ่งนี้เขาอาจอยู่คนละจังหวัด
+   * และตำแหน่งที่เก็บโดยไม่ได้ใช้ คือข้อมูลอ่อนไหวที่เราต้องรับผิดชอบเปล่า ๆ
+   */
+  const useHere = useCallback(
+    (lat: number, lng: number) => {
+      applyCoords(lat, lng);
+      setAskArea(false);
     },
     [applyCoords]
   );
@@ -174,7 +168,7 @@ export default function LiffPage() {
         if (cancelled) return;
 
         setToken(idToken);
-        const data = await load(idToken);
+        await load(idToken);
         if (cancelled) return;
         setState('ready');
 
@@ -197,11 +191,11 @@ export default function LiffPage() {
         }
         if (status === 'granted') {
           navigator.geolocation.getCurrentPosition(
-            (pos) => { if (!cancelled) sendArea(idToken, pos.coords.latitude, pos.coords.longitude); },
+            (pos) => { if (!cancelled) useHere(pos.coords.latitude, pos.coords.longitude); },
             () => {},
             { maximumAge: 600000, timeout: 8000 }
           );
-        } else if (status !== 'denied' && !data?.hasArea) {
+        } else if (status !== 'denied') {
           // ไม่เด้ง permission เอง — เด้งแล้วเขากดปฏิเสธ เบราว์เซอร์จำไว้ ขอใหม่ไม่ได้อีก
           // ชวนด้วยแถบเล็ก ๆ ให้เขาเห็นก่อนว่าเราจะเอาไปทำอะไร
           setAskArea(true);
@@ -212,14 +206,14 @@ export default function LiffPage() {
     }
     boot();
     return () => { cancelled = true; };
-  }, [load, sendArea]);
+  }, [load, useHere]);
 
   function requestArea() {
     if (!token || !navigator.geolocation) return;
     setAreaBusy(true);
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        await sendArea(token, pos.coords.latitude, pos.coords.longitude);
+      (pos) => {
+        useHere(pos.coords.latitude, pos.coords.longitude);
         setAreaBusy(false);
       },
       () => { setAreaBusy(false); setAskArea(false); },

@@ -164,7 +164,10 @@ async function onLocation(ev: Ev, userId: string, msg: Record<string, any>) {
   const lng = Number(msg.longitude);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return reply(ev.replyToken, M.fallback());
 
-  await repo.saveUserArea(userId, { lat, lng, label: msg.address ?? msg.title ?? null });
+  /**
+   * ใช้พิกัดที่เพิ่งแชร์มาเดี๋ยวนี้ แล้วทิ้ง ไม่เก็บลงฐาน
+   * เก็บไว้ก็ใช้ไม่ได้ เพราะครั้งหน้าเขาอาจอยู่คนละจังหวัด
+   */
   await repo.track('area_shared', userId);
 
   const [docs, actionsByType] = await Promise.all([
@@ -794,10 +797,7 @@ async function inlineDueToday(args: {
   const dueNow = args.queued.filter((r) => r.kind === 'upcoming' && r.send_on <= args.today);
   if (dueNow.length === 0) return [];
 
-  const [actionsByType, area] = await Promise.all([
-    loadRenewActions(),
-    repo.getUserArea(args.userId),
-  ]);
+  const actionsByType = await loadRenewActions();
   const msgs = M.upcomingReminder(
     [{
       documentId: args.doc.id,
@@ -807,8 +807,7 @@ async function inlineDueToday(args: {
       offsetDays: dueNow[0].offset_days,
     }],
     args.today,
-    actionsByType,
-    area
+    actionsByType
   );
 
   // ปิดคิวทิ้ง ไม่งั้น cron พรุ่งนี้จะส่งซ้ำ และครั้งนั้นเสียเงิน
