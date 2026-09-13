@@ -442,18 +442,26 @@ export function confirmExtractedMany(docs: ExtractedDoc[], today: ISODate): Line
  * ในการ์ด แต่ละใบเป็นบล็อกของตัวเอง มีเส้นคั่น ไม่ต้องเดาว่าบรรทัดไหนคู่กับใบไหน
  */
 export function savedMany(
-  docs: Array<{ typeKey: string; label?: string | null; expiry: ISODate }>,
+  docs: Array<{ typeKey: string; label?: string | null; expiry: ISODate; nextReminder?: ISODate | null }>,
   today: ISODate
 ): LineMessage[] {
   const body: LineMessage[] = [headRow(`บันทึกให้แล้ว ${docs.length} ใบครับ`, '13-thumbsup')];
 
   for (const d of docs) {
+    /**
+     * ยืนยันหลายใบพร้อมกัน ก็ยังต้องตอบคำถามเดิมที่เขามีทุกครั้ง:
+     * "แล้วจะเตือนฉันเมื่อไหร่"
+     *
+     * ลิสต์ทุกรอบของทุกใบจะยาวจนไม่มีใครอ่าน (4 ใบ = 12 บรรทัด)
+     * จึงบอกรอบถัดไปของแต่ละใบรอบเดียว ซึ่งเป็นรอบที่เขาจะเจอจริงก่อนใคร
+     * รอบที่เหลือดูได้ในหน้าเอกสารของฉัน ซึ่งมีปุ่มอยู่ในข้อความนี้แล้ว
+     */
+    const rows: LineMessage[] = [docRow(d.typeKey, d.label, 'md'), row('หมดอายุ', formatThai(d.expiry))];
+    if (d.nextReminder) rows.push(row('เตือนครั้งถัดไป', formatThai(d.nextReminder)));
+
     body.push(
       { type: 'separator', margin: 'md' },
-      {
-        type: 'box', layout: 'vertical', spacing: 'sm', margin: 'md',
-        contents: [docRow(d.typeKey, d.label, 'md'), row('หมดอายุ', formatThai(d.expiry))],
-      }
+      { type: 'box', layout: 'vertical', spacing: 'sm', margin: 'md', contents: rows }
     );
   }
   body.push({ type: 'separator', margin: 'md' }, DONE_LINE);

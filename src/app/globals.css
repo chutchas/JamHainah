@@ -204,3 +204,33 @@ html, body {
 .bar .btn { max-width: 528px; margin: 0 auto; }
 
 @media (prefers-reduced-motion: reduce) { .doc { transition: none; } }
+
+/* ------------------------------------------------------------
+   กล่องยืนยัน — ใช้แทน confirm() ของเบราว์เซอร์
+
+   confirm() ขึ้นหัวเรื่องเป็นชื่อโดเมนเสมอ เปลี่ยนไม่ได้ และปุ่มเป็น
+   Cancel / OK ภาษาอังกฤษ ทั้งหน้ากลายเป็นของเว็บแปลกหน้าไปหนึ่งวินาที
+   ตรงจังหวะที่เขากำลังจะลบของถาวร ซึ่งเป็นจังหวะที่ต้องมั่นใจที่สุด
+   ------------------------------------------------------------ */
+.sheet {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(17, 40, 34, .45);
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 16px;
+}
+.sheet-card {
+  width: 100%; max-width: 420px;
+  background: #fff; border-radius: 20px; padding: 20px 18px 16px;
+  box-shadow: 0 18px 40px rgba(11, 138, 114, .22);
+  animation: rise .16s ease-out;
+}
+@keyframes rise { from { transform: translateY(14px); opacity: .6; } }
+.sheet-card h2 { font-size: 17px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+.sheet-card p { font-size: 14px; line-height: 1.55; color: var(--muted); }
+.sheet-act { display: flex; gap: 10px; margin-top: 18px; }
+.sheet-act .btn { flex: 1; }
+
+/* จอกว้างพอ ให้กล่องอยู่กลางจอแทนการติดขอบล่าง */
+@media (min-height: 620px) {
+  .sheet { align-items: center; }
+}

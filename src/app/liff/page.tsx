@@ -94,6 +94,8 @@ export default function LiffPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  /** กล่องยืนยันลบทั้งหมด — ของเราเอง ไม่ใช่ confirm() ของเบราว์เซอร์ */
+  const [askWipe, setAskWipe] = useState(false);
 
   const [askArea, setAskArea] = useState(false); // ยังไม่มีพิกัด — ชวนเปิด
   const [areaBusy, setAreaBusy] = useState(false);
@@ -286,7 +288,7 @@ export default function LiffPage() {
 
   async function deleteEverything() {
     if (!token) return;
-    if (!confirm('ลบเอกสารทั้งหมดถาวร ยืนยันไหม')) return;
+    setAskWipe(false);
     setBusy(true);
     try {
       const res = await fetch('/api/liff/documents?id=all', {
@@ -517,11 +519,40 @@ export default function LiffPage() {
       )}
 
       <div className="foot">
-        <button className="btn danger" onClick={deleteEverything} disabled={busy}>
+        {/*
+          ไม่มีเอกสารสักใบ ปุ่มนี้ไม่มีอะไรให้ลบ — กดได้แต่ไม่เกิดอะไร คือปุ่มที่หลอกคน
+          และปุ่มสีแดงที่กดแล้วเงียบ ทำให้คนสงสัยว่าลบไปแล้วจริงไหม
+        */}
+        <button className="btn danger" onClick={() => setAskWipe(true)} disabled={busy || docs.length === 0}>
           ลบข้อมูลของฉันทั้งหมด
         </button>
         <p className="note">เราไม่เก็บรูปเอกสารของคุณ — อ่านวันหมดอายุแล้วทิ้งทันที</p>
       </div>
+
+      {/*
+        กล่องยืนยันของเราเอง ไม่ใช่ confirm() ของเบราว์เซอร์
+        เพราะ confirm() ขึ้นหัวเรื่องเป็นชื่อโดเมน (jam-hainah.vercel.app)
+        ซึ่งอ่านแล้วเหมือนเว็บแปลกหน้ามาขออะไรสักอย่าง ไม่ใช่แอปที่เขากำลังใช้อยู่
+        และปุ่มเป็น Cancel/OK ภาษาอังกฤษ สั่งให้เป็นภาษาไทยไม่ได้
+      */}
+      {askWipe && (
+        <div className="sheet" onClick={() => setAskWipe(false)}>
+          <div className="sheet-card" onClick={(e) => e.stopPropagation()}>
+            <h2>ยืนยันการลบ</h2>
+            <p>
+              ลบเอกสารทั้ง {docs.length} รายการและรอบเตือนทั้งหมดถาวร
+              <br />
+              กู้คืนไม่ได้ครับ
+            </p>
+            <div className="sheet-act">
+              <button className="btn" onClick={() => setAskWipe(false)} disabled={busy}>ยกเลิก</button>
+              <button className="btn danger" onClick={deleteEverything} disabled={busy}>
+                {busy ? 'กำลังลบ…' : 'ลบทั้งหมด'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectMode && selected.size > 0 && (
         <div className="bar">

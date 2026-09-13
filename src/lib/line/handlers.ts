@@ -645,16 +645,23 @@ async function onPostback(ev: Ev, userId: string) {
        */
       const docs = await repo.recentUnconfirmed(userId);
       if (docs.length === 0) return reply(ev.replyToken, M.fallback());
+
+      const saved: Array<{ typeKey: string; label: string | null; expiry: string; nextReminder: string | null }> = [];
       for (const d of docs) {
         await repo.updateDocument(d.id, { confirmed_by_user: true });
         const fresh = await repo.getDocument(d.id);
-        if (fresh) await repo.regenerateReminders(fresh, today);
+        const queued = fresh ? await repo.regenerateReminders(fresh, today) : [];
+        // รอบแรกที่ยังมาไม่ถึง — รอบที่เขาจะเจอจริงก่อนใคร
+        const next = queued
+          .filter((r) => r.offset_days <= 0 && r.send_on > today)
+          .sort((a, b) => a.send_on.localeCompare(b.send_on))[0];
+        saved.push({
+          typeKey: d.doc_type, label: d.label, expiry: d.expiry_date,
+          nextReminder: next?.send_on ?? null,
+        });
       }
       await repo.track('confirmed_all', userId, { count: docs.length });
-      return reply(
-        ev.replyToken,
-        M.savedMany(docs.map((d) => ({ typeKey: d.doc_type, label: d.label, expiry: d.expiry_date })), today)
-      );
+      return reply(ev.replyToken, M.savedMany(saved, today));
     }
 
     /* ---- rich menu : เพิ่มเอกสาร ---- */
