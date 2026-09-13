@@ -249,3 +249,35 @@ html, body {
 .legal b { color: var(--ink); font-weight: 600; }
 .legal a { color: var(--green); }
 .note.left { text-align: left; margin: 4px 0 0; }
+
+/* ------------------------------------------------------------
+   หลังบ้าน — ตัวเลขต้องอ่านจบด้วยการกวาดตา ไม่ใช่การเพ่ง
+   ------------------------------------------------------------ */
+.admin .tiles {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 8px; margin: 10px 0 6px;
+}
+.admin .tile {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 10px; display: flex; flex-direction: column; gap: 2px;
+}
+.admin .tile .n { font-size: 20px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.admin .tile .l { font-size: 11.5px; color: var(--ink-3); line-height: 1.35; }
+/* แดงเฉพาะช่องที่ต้องลงมือทำอะไรบางอย่าง ไม่ใช่ทุกช่องที่ตัวเลขไม่สวย */
+.admin .tile.bad { border-color: var(--warn-wash); background: var(--warn-wash); }
+.admin .tile.bad .n { color: var(--warn); }
+
+.admin .rows { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.admin .lead {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px;
+}
+.admin .lead-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.admin .lead b { font-size: 14.5px; }
+.admin .muted { font-size: 12.5px; color: var(--ink-3); }
+.admin .lead code {
+  font-size: 11px; color: var(--ink-3); word-break: break-all; display: block; margin-top: 4px;
+}
+.admin .warn {
+  background: var(--warn-wash); color: var(--warn); font-size: 13px; font-weight: 600;
+  border-radius: 10px; padding: 10px 12px; margin: 8px 0;
+}

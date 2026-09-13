@@ -14,6 +14,7 @@ import { env } from '@/lib/env';
 import { rolloverExpiry } from '@/lib/domain/reminders';
 import { loadRenewActions, mapsSearchUrl } from '@/lib/domain/renewActions';
 import * as repo from '@/lib/db/repo';
+import { notifyAdmin } from '@/lib/line/admin';
 
 type Ev = Record<string, any>;
 
@@ -667,6 +668,18 @@ async function onPostback(ev: Ev, userId: string) {
     case 'upsell': {
       const doc = docId ? await repo.getDocument(docId) : null;
       await repo.track('upsell_clicked', userId, { typeKey: doc?.doc_type ?? null, documentId: docId });
+      /**
+       * แจ้งเจ้าของระบบทันที ไม่ใช่รอให้ไปเปิดฐานข้อมูลเอง
+       * คนที่กดปุ่มนี้กำลังรอคำตอบจากคนจริง ๆ อยู่
+       */
+      const profile = await getProfile(userId);
+      await notifyAdmin(
+        M.leadAlert({
+          displayName: profile?.displayName, lineUserId: userId,
+          typeKey: doc?.doc_type ?? 'custom', label: doc?.label,
+          expiry: doc?.expiry_date ?? null, via: 'chat',
+        })
+      );
       return reply(ev.replyToken, M.upsellIntro(doc?.doc_type ?? 'vehicle_tax'));
     }
 

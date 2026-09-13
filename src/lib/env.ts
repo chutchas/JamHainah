@@ -31,7 +31,9 @@ export const env = {
    * ไม่ตั้งก็ไม่พัง แค่ไม่มีรายงาน (opt ไม่ใช่ req) เพราะระบบเตือนลูกค้า
    * ต้องไม่ล้มเพราะเรื่องภายในบ้านของเราเอง
    */
-  get adminUserId() { return opt('ADMIN_LINE_USER_ID'); },
+  get adminUserIds() {
+    return opt('ADMIN_LINE_USER_ID').split(',').map((v) => v.trim()).filter(Boolean);
+  },
   /**
    * ต้องมีเสมอ — ไม่มี fallback
    * ลิงก์ /liff แบบธรรมดาเปิดนอกแอป LINE ไม่ได้อยู่แล้ว (liff.init จะพัง)

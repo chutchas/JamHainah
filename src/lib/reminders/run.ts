@@ -17,7 +17,7 @@ import { db } from '@/lib/db/client';
 import { push } from '@/lib/line/client';
 import { upcomingReminder, dueReminder, cronReport, type ReminderItem } from '@/lib/line/messages';
 import { todayInBangkok } from '@/lib/domain/thaiDate';
-import { env } from '@/lib/env';
+import { notifyAdmin } from '@/lib/line/admin';
 import { track } from '@/lib/db/repo';
 import { loadRenewActions } from '@/lib/domain/renewActions';
 
@@ -41,13 +41,7 @@ interface QueueRow {
  * ห้ามให้การส่งรายงานทำให้รอบเตือนล้ม — งานหลักจบไปแล้วตอนที่ถึงบรรทัดนี้
  */
 async function report(summary: Parameters<typeof cronReport>[0]) {
-  const to = env.adminUserId;
-  if (!to) return;
-  try {
-    await push(to, cronReport(summary));
-  } catch (err) {
-    console.error('[cron] report failed', err);
-  }
+  await notifyAdmin(cronReport(summary));
 }
 
 export async function runReminders() {

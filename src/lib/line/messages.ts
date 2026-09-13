@@ -10,7 +10,9 @@
  *   6. ไม่มีคำว่า โปรโมชั่น / พิเศษ / ด่วน
  */
 import { ASK_TYPE_CHOICES, DocType, SUGGEST_BY_GROUP, plainName, docType } from '@/lib/domain/docTypes';
-import { ISODate, daysBetween, formatThai, humanRemaining, isUrgent, remainingValue } from '@/lib/domain/thaiDate';
+import {
+  ISODate, daysBetween, formatThai, humanRemaining, isUrgent, remainingValue, todayInBangkok as todayISO,
+} from '@/lib/domain/thaiDate';
 import { env } from '@/lib/env';
 import { RenewAction, mapsSearchUrl, renewWindow } from '@/lib/domain/renewActions';
 
@@ -1506,6 +1508,34 @@ export function dailyLimit(): LineMessage[] {
       ])
     ),
   ];
+}
+
+/**
+ * มีคนกด "ให้เราต่อให้" — ส่งหาเจ้าของระบบทันที ไม่ใช่ลูกค้า
+ *
+ * ก่อนหน้านี้การกดปุ่มนี้ถูกบันทึกเป็น event เฉย ๆ ไม่มีใครเห็น
+ * ลูกค้าที่ยอมให้เราทำงานให้ คือคนที่ยกมือขึ้นแล้ว — ปล่อยให้รอข้ามวัน
+ * แย่กว่าไม่มีปุ่มนั้นตั้งแต่แรก เพราะเขาเสียเวลารอสิ่งที่เราไม่ได้ทำ
+ *
+ * ใส่ชื่อและ user id มาด้วย เพื่อให้เปิดแชทคนนั้นใน OA Manager ได้ทันที
+ */
+export function leadAlert(args: {
+  displayName?: string | null;
+  lineUserId: string;
+  typeKey: string;
+  label?: string | null;
+  expiry?: ISODate | null;
+  via: 'chat' | 'web';
+}): LineMessage[] {
+  const who = args.displayName?.trim() || 'ผู้ใช้';
+  const lines = [
+    'งานเข้า — กด "ให้เราต่อให้"',
+    `${who} · ${args.via === 'web' ? 'จากหน้าเอกสารของฉัน' : 'จากแชท'}`,
+    plainName(args.typeKey, args.label),
+  ];
+  if (args.expiry) lines.push(`หมดอายุ ${formatThai(args.expiry)} (${remainingValue(todayISO(), args.expiry)})`);
+  lines.push(args.lineUserId);
+  return [text(lines.join('\n'))];
 }
 
 export function fallback(): LineMessage[] {

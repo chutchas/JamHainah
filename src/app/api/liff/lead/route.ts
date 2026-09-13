@@ -10,6 +10,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateLiff } from '@/lib/line/liffAuth';
 import * as repo from '@/lib/db/repo';
+import { getProfile } from '@/lib/line/client';
+import { notifyAdmin } from '@/lib/line/admin';
+import { leadAlert } from '@/lib/line/messages';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,5 +32,14 @@ export async function POST(req: NextRequest) {
   await repo.track('upsell_clicked', userId, {
     typeKey: doc.doc_type, documentId, via: 'liff',
   });
+
+  // งานเข้าต้องดังทันที — ที่เหลือคือความเร็วในการทักกลับ ซึ่งเป็นสินค้าจริงของขาบริการ
+  const profile = await getProfile(userId);
+  await notifyAdmin(
+    leadAlert({
+      displayName: profile?.displayName, lineUserId: userId,
+      typeKey: doc.doc_type, label: doc.label, expiry: doc.expiry_date, via: 'web',
+    })
+  );
   return NextResponse.json({ ok: true });
 }
