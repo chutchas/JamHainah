@@ -9,7 +9,7 @@
  * ถ้ายิงเองจะมีสองที่ที่รู้กติกา แล้ววันหนึ่งจะตัดสินไม่เหมือนกัน
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin, denied } from '@/lib/admin/auth';
+import { requireAdmin, denied, can } from '@/lib/admin/auth';
 import { db } from '@/lib/db/client';
 import * as repo from '@/lib/db/repo';
 import { todayInBangkok } from '@/lib/domain/thaiDate';
@@ -86,6 +86,10 @@ export async function POST(req: NextRequest) {
   const gate = await requireAdmin(req);
   if (!gate.ok) return denied(gate.status);
   const who = gate.who;
+  // ปุ่มนี้เสียเงินจริงทุกครั้งที่กด — พนักงานเห็นรายการได้ แต่กดไม่ได้
+  if (!can(who, 'retry')) {
+    return NextResponse.json({ error: 'ยิงซ้ำได้เฉพาะหัวหน้าขึ้นไป' }, { status: 403 });
+  }
 
   const body = (await req.json()) as { lineUserId?: string };
   const target = (body.lineUserId ?? '').trim();

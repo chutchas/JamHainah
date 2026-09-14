@@ -2,9 +2,10 @@
 
 import { Shell, Gate, useAdmin } from './Shell';
 import type { Order, Summary } from './types';
+import { STATUS_TH } from '@/lib/domain/caseWork';
 
 /**
- * หลังบ้าน หน้าสรุป — อ่านเป็นหลัก แตะได้เฉพาะสถานะงาน
+ * ห้องทำงาน หน้าสรุป — อ่านเป็นหลัก แตะได้เฉพาะสถานะงาน
  *
  * สิ่งที่หน้านี้ต้องตอบให้ได้ในสามวินาทีแรก เรียงตามความเร่ง:
  *   1. มีงานเข้าไหม (คนกด "ให้เราต่อให้")
@@ -15,10 +16,6 @@ import type { Order, Summary } from './types';
  * เรื่องที่ต้องลงมือทำทีละรายการ (ยิงซ้ำ · เพิ่มถอดสิทธิ์) แยกไปคนละหน้า
  * หน้าที่ทำได้ทุกอย่างในหน้าเดียว คือหน้าที่หาอะไรไม่เจอสักอย่างตอนรีบ
  */
-const STATUS_TH: Record<Order['status'], string> = {
-  new: 'ใหม่', accepted: 'รับงานแล้ว', in_progress: 'กำลังทำ', done: 'เสร็จ', cancelled: 'ยกเลิก',
-};
-
 // ขั้นถัดไปของแต่ละสถานะ — ปุ่มที่เห็นต้องเป็นปุ่มที่กดแล้วมีความหมายตอนนี้
 const NEXT: Partial<Record<Order['status'], Array<Order['status']>>> = {
   new: ['accepted', 'cancelled'],
@@ -56,7 +53,11 @@ export default function AdminHome() {
                     <b>{o.name ?? 'ผู้ใช้'}</b>
                     <span className={`pill ${o.status}`}>{STATUS_TH[o.status]}</span>
                   </div>
-                  <div className="muted">{o.service} · เปิดงาน {o.atThai}</div>
+                  <div className="muted">
+                    {o.service} · เปิดเคส {o.atThai}
+                    {o.priceThb != null && ` · ${o.priceThb} บาท`}
+                    {o.paid && ' · รับเงินแล้ว'}
+                  </div>
                   {o.note && <div className="muted">{o.note}</div>}
                   <div className="acts">
                     {(NEXT[o.status] ?? []).map((next) => (
@@ -69,8 +70,9 @@ export default function AdminHome() {
                         {STATUS_TH[next]}
                       </button>
                     ))}
+                    {/* รายละเอียดทั้งหมดอยู่ในหน้าเคส หน้าสรุปโชว์แค่พอให้รู้ว่าต้องไปดู */}
+                    <a className="btn" href={`/admin/cases/${o.id}`}>เปิดเคส</a>
                   </div>
-                  <code>{o.lineUserId}</code>
                 </div>
               ))}
             </div>

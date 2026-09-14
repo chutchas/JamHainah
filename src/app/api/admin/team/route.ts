@@ -1,5 +1,5 @@
 /**
- * เพิ่ม/ถอดผู้ดูแล — งานเดียวในหลังบ้านที่แตะสิทธิ์ของคนอื่น
+ * เพิ่ม/ถอดผู้ดูแล — งานเดียวในห้องทำงานที่แตะสิทธิ์ของคนอื่น
  *
  * เฉพาะ owner เท่านั้น และทุกการเปลี่ยนแปลงลง audit_log เสมอ
  * สิทธิ์ที่เปลี่ยนได้โดยไม่มีใครรู้ว่าใครเปลี่ยน คือสิทธิ์ที่เถียงกันไม่จบ
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = (await req.json()) as {
-    lineUserId?: string; role?: 'owner' | 'staff'; displayName?: string; note?: string;
+    lineUserId?: string; role?: string; displayName?: string; note?: string;
     disable?: boolean;
   };
 
@@ -50,9 +50,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
+  /**
+   * เปลี่ยนระดับของตัวเองไม่ได้ ด้วยเหตุผลเดียวกับที่ถอดสิทธิ์ตัวเองไม่ได้:
+   * เจ้าของคนเดียวที่เผลอลดตัวเองเป็นพนักงาน จะไม่มีใครเหลือที่เลื่อนกลับให้ได้
+   */
+  if (target === who.userId && body.role && body.role !== who.role) {
+    return NextResponse.json({ error: 'เปลี่ยนระดับของตัวเองไม่ได้' }, { status: 400 });
+  }
+  if (body.role && !repo.ADMIN_ROLES.includes(body.role as repo.AdminRole)) {
+    return NextResponse.json({ error: 'ระดับสิทธิ์ไม่ถูกต้อง' }, { status: 400 });
+  }
+
   const row = await repo.upsertAdmin({
     lineUserId: target,
-    role: body.role === 'owner' ? 'owner' : 'staff',
+    role: (body.role as repo.AdminRole) ?? before?.role ?? 'staff',
     displayName: body.displayName?.trim() || null,
     note: body.note?.trim() || null,
     addedBy: who.userId,

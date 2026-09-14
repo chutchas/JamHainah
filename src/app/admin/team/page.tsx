@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { Shell, Gate, useAdmin } from '../Shell';
 import type { Summary } from '../types';
+import { ADMIN_ROLES, ROLE_TH, ROLE_WHAT, type AdminRole } from '@/lib/domain/roles';
 
 /**
- * ทีม — หน้าเดียวในหลังบ้านที่แตะสิทธิ์ของคนอื่น
+ * ทีม — หน้าเดียวในห้องทำงานที่แตะสิทธิ์ของคนอื่น
  *
  * แยกออกมาจากหน้าสรุปโดยตั้งใจ: งานนี้ทำนาน ๆ ครั้ง แต่ผิดแล้วเจ็บ
  * การให้มันนั่งอยู่ท้ายหน้าที่เปิดดูทุกวัน คือการเชิญให้เผลอกด
@@ -14,6 +15,7 @@ export default function Team() {
   const { state, message, data, busy, act } = useAdmin<Summary>('/api/admin/summary');
   const [newId, setNewId] = useState('');
   const [name, setName] = useState('');
+  const [role, setRole] = useState<AdminRole>('staff');
 
   if (state !== 'ready' || !data) return <Gate state={state} message={message} />;
   const { team, me } = data;
@@ -26,7 +28,8 @@ export default function Team() {
 
       {!owner && (
         <p className="note left">
-          คุณเป็น staff — ดูรายชื่อได้ แต่เพิ่มหรือถอดสิทธิ์ได้เฉพาะเจ้าของระบบ
+          คุณเป็น{ROLE_TH[me.role as AdminRole] ?? me.role} — ดูรายชื่อได้
+          แต่เพิ่ม ถอด หรือเปลี่ยนระดับ ทำได้เฉพาะเจ้าของระบบ
         </p>
       )}
 
@@ -36,28 +39,45 @@ export default function Team() {
             ยังไม่มีใครในตาราง — ตอนนี้เข้าได้ด้วย ADMIN_LINE_USER_ID เท่านั้น
           </p>
         )}
-        {team.map((m) => (
-          <div className="lead" key={m.lineUserId}>
-            <div className="lead-top">
-              <b>{m.name ?? 'ไม่มีชื่อ'}</b>
-              <span className={`pill ${m.disabled ? 'cancelled' : m.role === 'owner' ? 'accepted' : ''}`}>
-                {m.disabled ? 'ถูกถอดสิทธิ์' : m.role === 'owner' ? 'เจ้าของระบบ' : 'staff'}
-              </span>
-            </div>
-            <code>{m.lineUserId}</code>
-            {owner && !m.disabled && m.lineUserId !== me.userId && (
-              <div className="acts">
-                <button
-                  className="btn danger" disabled={busy}
-                  onClick={() => act('/api/admin/team', { lineUserId: m.lineUserId, disable: true })}
-                >
-                  ถอดสิทธิ์
-                </button>
+        {team.map((m) => {
+          const self = m.lineUserId === me.userId;
+          return (
+            <div className="lead" key={m.lineUserId}>
+              <div className="lead-top">
+                <b>{m.name ?? 'ไม่มีชื่อ'}</b>
+                <span className={`pill ${m.disabled ? 'cancelled' : m.role === 'owner' ? 'accepted' : m.role === 'manager' ? 'in_progress' : ''}`}>
+                  {m.disabled ? 'ถูกถอดสิทธิ์' : ROLE_TH[m.role as AdminRole] ?? m.role}
+                </span>
               </div>
-            )}
-            {m.lineUserId === me.userId && <div className="muted">นี่คือบัญชีของคุณเอง</div>}
-          </div>
-        ))}
+              {!m.disabled && (
+                <div className="muted">{ROLE_WHAT[m.role as AdminRole]}</div>
+              )}
+              <code>{m.lineUserId}</code>
+
+              {owner && !m.disabled && !self && (
+                <div className="acts">
+                  <select
+                    value={m.role} disabled={busy}
+                    onChange={(e) =>
+                      act('/api/admin/team', { lineUserId: m.lineUserId, role: e.target.value })
+                    }
+                  >
+                    {ADMIN_ROLES.map((r) => (
+                      <option key={r} value={r}>{ROLE_TH[r]}</option>
+                    ))}
+                  </select>
+                  <button
+                    className="btn danger" disabled={busy}
+                    onClick={() => act('/api/admin/team', { lineUserId: m.lineUserId, disable: true })}
+                  >
+                    ถอดสิทธิ์
+                  </button>
+                </div>
+              )}
+              {self && <div className="muted">นี่คือบัญชีของคุณเอง — เปลี่ยนระดับหรือถอดสิทธิ์ตัวเองไม่ได้</div>}
+            </div>
+          );
+        })}
       </div>
 
       {owner && (
@@ -73,25 +93,29 @@ export default function Team() {
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="ชื่อที่จะให้แสดงในหน้านี้ (ใส่หรือไม่ใส่ก็ได้)"
+              placeholder="ชื่อที่จะให้แสดงในหน้านี้"
             />
+            <select value={role} onChange={(e) => setRole(e.target.value as AdminRole)}>
+              {ADMIN_ROLES.map((r) => (
+                <option key={r} value={r}>{ROLE_TH[r]}</option>
+              ))}
+            </select>
             <button
               className="btn primary" disabled={busy || !/^U[0-9a-f]{32}$/.test(newId.trim())}
               onClick={() =>
                 act('/api/admin/team', {
-                  lineUserId: newId.trim(), role: 'staff', displayName: name.trim() || undefined,
+                  lineUserId: newId.trim(), role, displayName: name.trim() || undefined,
                 }).then(() => { setNewId(''); setName(''); })
               }
             >
-              เพิ่มเป็น staff
+              เพิ่มเข้าทีม
             </button>
+            <p className="note left">{ROLE_WHAT[role]}</p>
           </div>
           <p className="note left">
             หารหัสได้จากตาราง users ใน Supabase — ให้เขาทักบอทก่อนหนึ่งครั้ง แล้วรหัสจะไปโผล่ที่นั่น
             <br />
-            staff ทำงานในคิวและยิงซ้ำได้ แต่แตะสิทธิ์ของคนอื่นไม่ได้ และถอดสิทธิ์ตัวเองไม่ได้
-            <br />
-            ทุกการเพิ่มและถอด ถูกบันทึกว่าใครทำและทำเมื่อไหร่
+            ทุกการเพิ่ม ถอด และเปลี่ยนระดับ ถูกบันทึกว่าใครทำและทำเมื่อไหร่
           </p>
         </>
       )}

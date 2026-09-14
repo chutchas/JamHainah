@@ -251,7 +251,7 @@ html, body {
 .note.left { text-align: left; margin: 4px 0 0; }
 
 /* ------------------------------------------------------------
-   หลังบ้าน — ตัวเลขต้องอ่านจบด้วยการกวาดตา ไม่ใช่การเพ่ง
+   ห้องทำงาน — ตัวเลขต้องอ่านจบด้วยการกวาดตา ไม่ใช่การเพ่ง
    ------------------------------------------------------------ */
 .admin .tiles {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
@@ -282,16 +282,16 @@ html, body {
   border-radius: 10px; padding: 10px 12px; margin: 8px 0;
 }
 
-/* ป้ายบอกว่านี่คือหน้าหลังบ้าน — กันเผลอเปิดโชว์ตอนสาธิตให้คนอื่นดู */
+/* ป้ายบอกว่านี่คือหน้าห้องทำงาน — กันเผลอเปิดโชว์ตอนสาธิตให้คนอื่นดู */
 .hero-bar .tag {
   font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
   color: var(--warn); background: var(--warn-wash);
   border-radius: 999px; padding: 3px 9px; flex: none;
 }
-/* หน้าหลังบ้านไม่มีหัวข้อ h1 ในเนื้อหา หัวข้อแรกจึงไม่ต้องเว้นบนเยอะ */
+/* หน้าห้องทำงานไม่มีหัวข้อ h1 ในเนื้อหา หัวข้อแรกจึงไม่ต้องเว้นบนเยอะ */
 .admin h2:first-of-type { margin-top: 14px; }
 
-/* ---- คิวงานและทีมในหน้าหลังบ้าน ---- */
+/* ---- คิวงานและทีมในหน้าห้องทำงาน ---- */
 .admin .pill {
   font-size: 11px; font-weight: 700; border-radius: 999px; padding: 3px 9px; flex: none;
   background: var(--ground); color: var(--ink-2);
@@ -312,7 +312,7 @@ html, body {
 }
 
 /* ------------------------------------------------------------
-   หลังบ้านบนจอคอม
+   ห้องทำงานบนจอคอม
    ------------------------------------------------------------
    ทุกอย่างในบล็อกนี้ขึ้นต้นด้วย .admin เสมอ
    หน้า "เอกสารของฉัน" ของลูกค้าใช้ .wrap ตัวเดียวกัน แต่ไม่มี .admin
@@ -367,7 +367,7 @@ html, body {
 .admin .cols { display: flex; flex-direction: column; }
 
 @media (min-width: 900px) {
-  /* กว้างขึ้นเฉพาะหลังบ้าน เพราะที่นี่เอาไว้กวาดสายตาหาของ ไม่ใช่อ่านเรียงบรรทัด */
+  /* กว้างขึ้นเฉพาะห้องทำงาน เพราะที่นี่เอาไว้กวาดสายตาหาของ ไม่ใช่อ่านเรียงบรรทัด */
   .admin.wrap { max-width: 1040px; padding-bottom: 64px; }
   .admin .hero-img { height: 150px; }
 
@@ -388,8 +388,62 @@ html, body {
   .admin .acts .btn { flex: 0 0 auto; width: auto; min-width: 128px; }
   .admin .addrow { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: start; }
   .admin .addrow .note { grid-column: 1 / -1; }
-  .admin .addrow .btn { width: auto; min-width: 150px; }
+  /* grid ยืดลูกทุกตัวเต็มช่อง ปุ่มจึงต้องบอกว่าให้เกาะซ้ายและกว้างเท่าตัวหนังสือ
+     ไม่งั้นปุ่ม "จดไว้" จะกว้างครึ่งจอ ทั้งที่เป็นปุ่มรอง */
+  .admin .addrow .btn { width: auto; min-width: 150px; justify-self: start; }
+  .admin .addrow select { justify-self: start; }
 
   .admin .lead { padding: 14px 16px; }
   .admin .stuckrow { font-size: 13.5px; }
+}
+
+/* ---- เคส: ฟอร์มเปิดเคส เลือกลูกค้า ข้อมูลรถ และไทม์ไลน์ ---- */
+.admin select {
+  padding: 10px 12px; font-size: 14px; font-family: inherit;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.admin .acts select { flex: 0 0 auto; min-width: 132px; }
+/* ลิงก์ที่ทำหน้าที่เป็นปุ่ม ต้องสูงเท่าปุ่มจริงที่อยู่ข้าง ๆ */
+.admin .acts a.btn { line-height: 1.4; text-decoration: none; }
+
+.admin .formcard { margin: 10px 0 14px; }
+.admin .formcard h3 { font-size: 15px; font-weight: 700; color: var(--ink); margin: 0 0 4px; }
+
+.admin .picklist { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.admin .pickrow {
+  display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left;
+  padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); cursor: pointer; font-family: inherit; width: 100%;
+}
+/* คนที่เลือกไว้ต้องเห็นชัดกว่าที่เหลือ — เปิดเคสผิดคนคือเรื่องที่แก้ยากทีหลัง */
+.admin .pickrow.on { border-color: var(--green); background: var(--green-wash); }
+.admin .pickrow b { font-size: 14px; color: var(--ink); }
+.admin .pickrow code { font-size: 11px; color: var(--ink-3); word-break: break-all; }
+
+.admin .fields { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.admin .fields label { display: flex; flex-direction: column; gap: 4px; }
+.admin .fields span { font-size: 12.5px; color: var(--ink-3); }
+.admin .fields input {
+  padding: 10px 12px; font-size: 14px; font-family: inherit;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink);
+}
+.admin .fields input:disabled { background: var(--ground); color: var(--ink-3); }
+
+.admin .caselink { display: block; text-decoration: none; color: inherit; }
+.admin .caselink:hover { border-color: var(--green); }
+
+.admin .timeline { display: flex; flex-direction: column; margin: 10px 0 4px; }
+.admin .tl {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: baseline;
+  padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px;
+}
+.admin .tl-when { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.admin .tl-what { color: var(--ink); }
+.admin .tl-who { color: var(--ink-3); font-size: 12px; }
+
+@media (min-width: 900px) {
+  /* ช่องข้อมูลรถอ่านเป็นคู่ ๆ ได้บนจอกว้าง ไม่ต้องเลื่อนยาว */
+  .admin .fields { grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+  .admin .addrow { grid-template-columns: 1fr 1fr auto auto; }
 }

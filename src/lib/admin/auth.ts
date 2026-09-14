@@ -1,5 +1,5 @@
 /**
- * ด่านเข้าหน้าหลังบ้าน — ที่เดียวในระบบที่ตัดสินว่าใครเป็นผู้ดูแล
+ * ด่านเข้าหน้าห้องทำงาน — ที่เดียวในระบบที่ตัดสินว่าใครเป็นผู้ดูแล
  *
  * สองชั้นเสมอ:
  *   1. ต้องรู้ก่อนว่าเป็นใคร — จากคุกกี้ที่เราเซ็นเอง หรือ idToken ของ LIFF
@@ -22,10 +22,36 @@ import * as repo from '@/lib/db/repo';
 
 export interface AdminIdentity {
   userId: string;
-  role: 'owner' | 'staff';
+  role: repo.AdminRole;
   /** มาจาก env ไม่ใช่จากตาราง — ถอดสิทธิ์ผ่านหน้าเว็บไม่ได้ */
   bootstrap: boolean;
 }
+
+/**
+ * ใครทำอะไรได้ — ตารางเดียวของทั้งระบบ
+ *
+ * เขียนเป็นข้อมูล ไม่ใช่ if กระจายตามไฟล์ เพราะคำถาม "ตกลงพนักงานเห็นราคาไหม"
+ * ต้องตอบได้ด้วยการอ่านที่เดียว ไม่ใช่ไล่อ่านทุก route แล้วหวังว่าไม่มีที่ตกหล่น
+ *
+ *   team     เพิ่ม ถอด เปลี่ยนระดับคนในทีม
+ *   money    เห็นราคา ค่าข้อความ และยอดเงิน
+ *   retry    ยิงเตือนซ้ำ (เสียเงินจริงทุกครั้งที่กด)
+ *   queue    รับงาน เปลี่ยนสถานะ จดโน้ต
+ */
+export const CAN = {
+  team:  ['owner'],
+  money: ['owner', 'manager'],
+  retry: ['owner', 'manager'],
+  queue: ['owner', 'manager', 'staff'],
+} as const satisfies Record<string, readonly repo.AdminRole[]>;
+
+export type Permission = keyof typeof CAN;
+
+export function can(who: AdminIdentity, what: Permission): boolean {
+  return (CAN[what] as readonly string[]).includes(who.role);
+}
+
+
 
 export type AdminGate =
   | { ok: true; who: AdminIdentity }
@@ -66,5 +92,5 @@ export function denied(status: 401 | 403) {
 
 /** งานที่แตะสิทธิ์คนอื่น ต้องเป็น owner เท่านั้น */
 export function isOwner(who: AdminIdentity): boolean {
-  return who.role === 'owner';
+  return can(who, 'team');
 }

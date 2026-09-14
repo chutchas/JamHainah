@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 
 /**
- * โครงหน้าหลังบ้าน — ใช้ร่วมกันทั้งสามหน้า
+ * โครงหน้าห้องทำงาน — ใช้ร่วมกันทั้งสามหน้า
  *
  * หัวเว็บชุดเดียวกับ "เอกสารของฉัน" แต่ติดป้าย admin เพราะเราไม่อยาก
  * เผลอโชว์หน้านี้ตอนสาธิตให้คนอื่นดู
@@ -14,6 +14,7 @@ import { usePathname } from 'next/navigation';
  */
 const NAV = [
   { href: '/admin', label: 'สรุป' },
+  { href: '/admin/cases', label: 'เคส' },
   { href: '/admin/reminders', label: 'รายการค้าง' },
   { href: '/admin/team', label: 'ทีม' },
 ];
@@ -26,14 +27,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <div className="hero-img" role="presentation" />
         <div className="hero-bar">
           <img className="logo" src="/brand/logo.png" alt="" width={44} height={44} />
-          <h1>หลังบ้าน</h1>
+          <h1>ห้องทำงาน</h1>
           <span className="tag">admin</span>
         </div>
       </header>
 
       <nav className="adminnav">
         {NAV.map((n) => (
-          <a key={n.href} href={n.href} className={here === n.href ? 'on' : undefined}>
+          <a
+            key={n.href}
+            href={n.href}
+            /* หน้าย่อยอย่าง /admin/cases/<id> ต้องยังไฮไลต์ที่ "เคส" อยู่ */
+            className={here === n.href || (n.href !== '/admin' && here.startsWith(`${n.href}/`)) ? 'on' : undefined}
+          >
             {n.label}
           </a>
         ))}
@@ -60,7 +66,7 @@ const REASON: Record<string, string> = {
 };
 
 /**
- * โหลดข้อมูลหลังบ้านหนึ่งชุด พร้อมจัดการเรื่องตัวตนให้ครบในที่เดียว
+ * โหลดข้อมูลห้องทำงานหนึ่งชุด พร้อมจัดการเรื่องตัวตนให้ครบในที่เดียว
  *
  * 401 = ไม่รู้ว่าเป็นใคร → พาไปล็อกอิน
  * 403 = รู้แล้วแต่ไม่ใช่ผู้ดูแล → บอกตรง ๆ ไม่ต้องพาไปล็อกอินซ้ำให้เสียเวลา
@@ -111,7 +117,10 @@ export function useAdmin<T>(url: string) {
    * หน้านี้มีคนใช้พร้อมกันได้ตั้งแต่วันแรกที่มีทีม การเดาสถานะฝั่งหน้าจอ
    * จะทำให้สองคนเห็นคิวไม่ตรงกัน แล้วรับงานชิ้นเดียวกันซ้อน
    */
-  const act = useCallback(async (target: string, body: unknown): Promise<string | null> => {
+  /** ยิงคำสั่งหนึ่งครั้ง คืนคำตอบดิบ — ใช้ตอนที่ยังไม่ควรโหลดหน้าใหม่ เช่นการค้นหา */
+  const post = useCallback(async (
+    target: string, body: unknown,
+  ): Promise<Record<string, any> | null> => {
     setBusy(true);
     try {
       const res = await fetch(target, {
@@ -123,14 +132,21 @@ export function useAdmin<T>(url: string) {
       if (res.status === 401) { window.location.href = '/api/admin/login'; return null; }
       if (!res.ok) { setMessage(out.error ?? `ทำรายการไม่สำเร็จ (${res.status})`); return null; }
       setMessage('');
-      await load();
-      return out.note ?? null;
+      return out;
     } finally {
       setBusy(false);
     }
-  }, [load]);
+  }, []);
 
-  return { state, message, setMessage, data, busy, act, reload: load };
+  const act = useCallback(async (
+    target: string, body: unknown,
+  ): Promise<Record<string, any> | null> => {
+    const out = await post(target, body);
+    if (out) await load();
+    return out;
+  }, [post, load]);
+
+  return { state, message, setMessage, data, busy, act, post, reload: load };
 }
 
 /** หน้าจอระหว่างยังไม่มีข้อมูลให้แสดง — เขียนที่เดียวให้ทุกหน้าเหมือนกัน */

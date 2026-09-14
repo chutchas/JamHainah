@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /**
- * หน้าหลังบ้านเห็นข้อมูลของลูกค้าทุกคน
+ * หน้าห้องทำงานเห็นข้อมูลของลูกค้าทุกคน
  *
  * ด่านที่กันไว้มีสองชั้น และต้องมีครบทั้งคู่ในทุก route ใต้ /api/admin:
  *   1. รู้ว่าเป็นใคร — คุกกี้ที่เราเซ็นเอง หรือ idToken ที่ตรวจกับ LINE แล้ว
@@ -63,7 +63,7 @@ test('ด่านต้องแยก "ไม่รู้ว่าเป็น
   assert.match(auth, /status: 401/, 'ไม่มีทาง 401 เลย');
   assert.match(auth, /status: 403/, 'ไม่มีทาง 403 เลย');
 
-  // การจัดการตัวตนอยู่ใน Shell ที่เดียว — ทุกหน้าหลังบ้านต้องผ่านมัน
+  // การจัดการตัวตนอยู่ใน Shell ที่เดียว — ทุกหน้าห้องทำงานต้องผ่านมัน
   const shell = fs.readFileSync(
     path.resolve(import.meta.dirname, '..', 'src', 'app', 'admin', 'Shell.tsx'), 'utf8');
   assert.ok(
@@ -79,7 +79,7 @@ test('ด่านต้องแยก "ไม่รู้ว่าเป็น
  * หน้าที่โหลดข้อมูลเอง คือหน้าที่วันหนึ่งจะลืมจัดการ 401
  * แล้วขึ้นหน้าเปล่าให้คนที่แค่ยังไม่ได้ล็อกอิน
  */
-test('ทุกหน้าหลังบ้านต้องใช้ Shell ตัวเดียวกัน', () => {
+test('ทุกหน้าห้องทำงานต้องใช้ Shell ตัวเดียวกัน', () => {
   const dir = path.resolve(import.meta.dirname, '..', 'src', 'app', 'admin');
   const walk = (d: string, out: string[] = []): string[] => {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
@@ -90,7 +90,7 @@ test('ทุกหน้าหลังบ้านต้องใช้ Shell �
     return out;
   };
   const pages = walk(dir);
-  assert.ok(pages.length >= 3, 'หน้าหลังบ้านหายไป');
+  assert.ok(pages.length >= 3, 'หน้าห้องทำงานหายไป');
   for (const f of pages) {
     const src = fs.readFileSync(f, 'utf8');
     const rel = path.relative(path.resolve(import.meta.dirname, '..'), f);
@@ -99,14 +99,14 @@ test('ทุกหน้าหลังบ้านต้องใช้ Shell �
 });
 
 /**
- * หน้าหลังบ้านต้องเปิดบนคอมได้ จึงห้ามพึ่ง LIFF SDK ซึ่งทำงานได้เฉพาะในแอป LINE
+ * หน้าห้องทำงานต้องเปิดบนคอมได้ จึงห้ามพึ่ง LIFF SDK ซึ่งทำงานได้เฉพาะในแอป LINE
  * ความพังของแบบเดิมคือเงียบ — หน้าเปิดได้ แต่ไม่มี token แล้วไปโผล่เป็น 403
  */
-test('หน้าหลังบ้านต้องไม่เรียก LIFF SDK', () => {
+test('หน้าห้องทำงานต้องไม่เรียก LIFF SDK', () => {
   const page = fs.readFileSync(
     path.resolve(import.meta.dirname, '..', 'src', 'app', 'admin', 'page.tsx'), 'utf8');
   for (const bad of ['liff.init', 'getIDToken', 'static.line-scdn.net']) {
-    assert.ok(!page.includes(bad), `หน้าหลังบ้านยังเรียก ${bad} อยู่`);
+    assert.ok(!page.includes(bad), `หน้าห้องทำงานยังเรียก ${bad} อยู่`);
   }
 });
 

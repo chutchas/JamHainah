@@ -2,6 +2,7 @@ import { db } from './client';
 import { computeReminders, classifyExpiryChange } from '@/lib/domain/reminders';
 import { docType as docTypeOf } from '@/lib/domain/docTypes';
 import type { ISODate } from '@/lib/domain/thaiDate';
+import { ADMIN_ROLES, type AdminRole } from '@/lib/domain/roles';
 
 /**
  * ที่มาของเอกสารหนึ่งใบ
@@ -392,10 +393,13 @@ export async function countAiCalls(lineUserId: string, hours = 24): Promise<numb
 
 /* ---------------- ผู้ดูแลระบบ ---------------- */
 
+export { ADMIN_ROLES };
+export type { AdminRole };
+
 export interface AdminRow {
   line_user_id: string;
   display_name: string | null;
-  role: 'owner' | 'staff';
+  role: AdminRole;
   added_by: string | null;
   note: string | null;
   created_at: string;
@@ -414,7 +418,7 @@ export async function listAdmins(): Promise<AdminRow[]> {
 }
 
 export async function upsertAdmin(args: {
-  lineUserId: string; role: 'owner' | 'staff'; displayName?: string | null;
+  lineUserId: string; role: AdminRole; displayName?: string | null;
   note?: string | null; addedBy: string;
 }): Promise<AdminRow> {
   const { data, error } = await db()
@@ -444,7 +448,7 @@ export async function disableAdmin(lineUserId: string): Promise<void> {
 /* ---------------- ร่องรอยว่าใครทำอะไร ---------------- */
 
 /**
- * ทุกการเขียนของฝั่งหลังบ้านต้องผ่านที่นี่
+ * ทุกการเขียนของฝั่งห้องทำงานต้องผ่านที่นี่
  *
  * เก็บ before/after ทั้งก้อน เพราะตอนที่ต้องใช้จริง เราจะไม่รู้ล่วงหน้า
  * ว่าต้องดู field ไหน และของที่ไม่ได้เก็บ ย้อนไปเก็บไม่ได้
@@ -525,6 +529,96 @@ export async function openOrder(args: {
     order_id: row.id, kind: 'created', detail: { via: args.via },
   });
   return row;
+}
+
+/**
+ * เปิดเคสด้วยมือจากห้องทำงาน — ลูกค้าโทรมา ทักมา หรือเจอกันหน้าร้าน
+ *
+ * แยกจาก openOrder เพราะคนละที่มาและคนละกติกา:
+ * openOrder กันเปิดซ้ำจากการที่ลูกค้ากดปุ่มรัว ๆ ส่วนอันนี้มีคนตั้งใจกดสร้าง
+ * ถ้าเขาอยากเปิดใบที่สองของเอกสารใบเดิม แปลว่าเขามีเหตุผลที่เราไม่รู้
+ */
+export async function createOrder(args: {
+  lineUserId: string; service: string; documentId?: string | null;
+  note?: string | null; actor: string;
+}): Promise<OrderRow> {
+  const { data, error } = await db()
+    .from('orders')
+    .insert({
+      line_user_id: args.lineUserId,
+      document_id: args.documentId ?? null,
+      service: args.service,
+      note: args.note ?? null,
+      assignee: args.actor,
+    })
+    .select()
+    .single();
+  if (error) throw new Error(`createOrder: ${error.message}`);
+
+  const row = data as OrderRow;
+  await db().from('order_events').insert({
+    order_id: row.id, actor: args.actor, kind: 'created', detail: { via: 'manual' },
+  });
+  return row;
+}
+
+/**
+ * แก้รายละเอียดเคส — ราคา การจ่ายเงิน ข้อมูลรถ โน้ต
+ *
+ * ทุกครั้งลงไทม์ไลน์ว่าเปลี่ยนฟิลด์ไหน ไม่ใช่แค่ว่า "มีคนแก้"
+ * ตอนลูกค้าถามว่าทำไมราคาไม่เท่าที่คุยไว้ เราต้องตอบได้ว่าใครเปลี่ยนตอนไหน
+ */
+export async function updateOrder(args: {
+  id: string; actor: string;
+  priceThb?: number | null; paid?: boolean;
+  vehicle?: Record<string, unknown>; note?: string | null;
+}): Promise<OrderRow> {
+  const patch: Record<string, unknown> = {};
+  const changed: string[] = [];
+  if (args.priceThb !== undefined) { patch.price_thb = args.priceThb; changed.push('ราคา'); }
+  if (args.note !== undefined) { patch.note = args.note; changed.push('โน้ต'); }
+  if (args.vehicle !== undefined) { patch.vehicle = args.vehicle; changed.push('ข้อมูลรถ'); }
+  if (args.paid !== undefined) {
+    patch.paid_at = args.paid ? new Date().toISOString() : null;
+    changed.push(args.paid ? 'รับเงินแล้ว' : 'ยกเลิกการรับเงิน');
+  }
+  if (!changed.length) {
+    const current = await getOrder(args.id);
+    if (!current) throw new Error('updateOrder: ไม่พบเคสนี้');
+    return current;
+  }
+
+  const { data, error } = await db()
+    .from('orders').update(patch).eq('id', args.id).select().single();
+  if (error) throw new Error(`updateOrder: ${error.message}`);
+
+  await db().from('order_events').insert({
+    order_id: args.id, actor: args.actor, kind: 'edit', detail: { changed },
+  });
+  return data as OrderRow;
+}
+
+/** จดสิ่งที่คุยกับลูกค้า — ของที่อยู่ในหัวคนเดียว หายไปพร้อมคนคนนั้น */
+export async function addOrderNote(args: {
+  id: string; actor: string; text: string;
+}): Promise<void> {
+  const { error } = await db().from('order_events').insert({
+    order_id: args.id, actor: args.actor, kind: 'note', detail: { text: args.text },
+  });
+  if (error) throw new Error(`addOrderNote: ${error.message}`);
+}
+
+/** หาลูกค้าจากชื่อหรือรหัส — ตอนเปิดเคสเองต้องรู้ว่าเปิดให้ใคร */
+export async function searchUsers(q: string, limit = 10) {
+  const term = q.trim();
+  if (!term) return [];
+  const { data } = await db()
+    .from('users')
+    .select('line_user_id, display_name')
+    .or(`display_name.ilike.%${term}%,line_user_id.ilike.%${term}%`)
+    .is('deleted_at', null)
+    .limit(limit);
+  return (data as Array<{ line_user_id: string; display_name: string | null }>) ?? [];
 }
 
 export async function listOrders(limit = 50): Promise<OrderRow[]> {

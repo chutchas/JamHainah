@@ -9,10 +9,11 @@ export interface Order {
   status: 'new' | 'accepted' | 'in_progress' | 'done' | 'cancelled';
   service: string; name: string | null; lineUserId: string; atThai: string;
   assignee: string | null; note: string | null;
+  priceThb: number | null; paid: boolean;
 }
 
 export interface Member {
-  lineUserId: string; name: string | null; role: 'owner' | 'staff'; disabled: boolean;
+  lineUserId: string; name: string | null; role: string; disabled: boolean;
 }
 
 export interface Summary {
@@ -34,7 +35,7 @@ export interface Summary {
   leads: Lead[];
   orders: Order[];
   team: Member[];
-  me: { userId: string; role: 'owner' | 'staff'; bootstrap: boolean };
+  me: { userId: string; role: string; bootstrap: boolean; seesMoney: boolean };
 }
 
 /** /api/admin/reminders */

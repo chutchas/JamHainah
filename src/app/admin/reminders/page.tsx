@@ -29,7 +29,7 @@ export default function Reminders() {
   async function fire(p: StuckPerson) {
     setAsking(null);
     const out = await act('/api/admin/reminders', { lineUserId: p.lineUserId });
-    setNote(out ?? `ยิงซ้ำให้ ${p.name ?? 'ผู้ใช้'} แล้ว`);
+    if (out) setNote((out.note as string) ?? `ยิงซ้ำให้ ${p.name ?? 'ผู้ใช้'} แล้ว`);
   }
 
   return (

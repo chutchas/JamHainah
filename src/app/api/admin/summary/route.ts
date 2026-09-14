@@ -1,5 +1,5 @@
 /**
- * ตัวเลขทั้งหมดของหลังบ้าน — อ่านอย่างเดียว
+ * ตัวเลขทั้งหมดของห้องทำงาน — อ่านอย่างเดียว
  *
  * หน้านี้เห็นข้อมูลของลูกค้าทุกคน จึงต้องผ่านสองด่าน:
  *   1. ต้องรู้ว่าเป็นใคร — คุกกี้ที่เราเซ็นเอง หรือ idToken จาก LINE
@@ -10,7 +10,7 @@
  * ปลอดภัยกว่าการเปิดให้ทุกคนตอนที่ยังไม่ได้ตั้งค่า
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin, denied } from '@/lib/admin/auth';
+import { requireAdmin, denied, can } from '@/lib/admin/auth';
 import * as repo from '@/lib/db/repo';
 import { db } from '@/lib/db/client';
 import { todayInBangkok, formatThai } from '@/lib/domain/thaiDate';
@@ -102,6 +102,12 @@ export async function GET(req: NextRequest) {
 
   // รอบ cron ล่าสุด — ตอบคำถามว่า "เมื่อเช้ามันทำงานไหม"
   const lastCron = events.find((e) => e.name === 'cron_run');
+  /**
+   * ตัวเลขเงินถูกตัดออกที่เซิร์ฟเวอร์ ไม่ใช่ซ่อนที่หน้าจอ
+   * ของที่ส่งไปถึงเบราว์เซอร์แล้ว ถือว่าคนที่นั่งอยู่หน้าจอนั้นเห็นแล้ว
+   * ต่อให้ CSS จะซ่อนไว้ก็ตาม
+   */
+  const seesMoney = can(who, 'money');
 
   // คิวงานจริง — ของที่ต้องลงมือทำ ไม่ใช่ตัวเลขไว้ดู
   const [orderRows, adminRows] = await Promise.all([repo.listOrders(30), repo.listAdmins()]);
@@ -120,6 +126,8 @@ export async function GET(req: NextRequest) {
     atThai: formatThai(o.created_at.slice(0, 10)),
     assignee: o.assignee,
     note: o.note,
+    priceThb: seesMoney ? o.price_thb : null,
+    paid: o.paid_at !== null,
   }));
 
   return NextResponse.json({
@@ -131,7 +139,12 @@ export async function GET(req: NextRequest) {
     },
     reminders: {
       pendingToday, failedQueue, sentWeek,
-      lastCron: lastCron ? { at: lastCron.created_at, ...lastCron.props } : null,
+      lastCron: lastCron
+        ? (() => {
+            const { estimated_cost_thb, ...rest } = lastCron.props as Record<string, unknown>;
+            return { at: lastCron.created_at, ...rest, ...(seesMoney ? { estimated_cost_thb } : {}) };
+          })()
+        : null,
     },
     reading: {
       readOk,
@@ -151,7 +164,7 @@ export async function GET(req: NextRequest) {
       role: a.role,
       disabled: a.disabled_at !== null,
     })),
-    me: { userId: who.userId, role: who.role, bootstrap: who.bootstrap },
+    me: { userId: who.userId, role: who.role, bootstrap: who.bootstrap, seesMoney },
     tally,
   });
 }

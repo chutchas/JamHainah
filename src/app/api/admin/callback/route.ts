@@ -19,7 +19,7 @@ import { STATE_COOKIE, callbackUrl } from '@/lib/admin/oauth';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** พากลับไปหน้าหลังบ้านพร้อมรหัสปัญหา — หน้าเว็บเป็นคนแปลเป็นภาษาคน */
+/** พากลับไปหน้าห้องทำงานพร้อมรหัสปัญหา — หน้าเว็บเป็นคนแปลเป็นภาษาคน */
 function back(reason: string) {
   const res = NextResponse.redirect(`${env.baseUrl}/admin?e=${reason}`);
   res.cookies.set(STATE_COOKIE, '', cookieOptions(0));

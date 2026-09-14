@@ -36,7 +36,7 @@ function asset(path: string): string | null {
 }
 const mascot = (name: string) => asset(`mascot/${name}.png`);
 /**
- * ลิงก์หลังบ้าน — ใส่ท้ายข้อความที่ส่งหาเจ้าของระบบเท่านั้น
+ * ลิงก์ห้องทำงาน — ใส่ท้ายข้อความที่ส่งหาเจ้าของระบบเท่านั้น
  * มีลิงก์อยู่ตรงที่เขากำลังอ่านอยู่แล้ว ดีกว่าต้องไปหาเองในเบราว์เซอร์
  * (และเป็นเหตุผลว่าทำไมไม่ต้องทำ rich menu แยกสำหรับ admin)
  */
@@ -1482,7 +1482,7 @@ export function cronReport(s: {
 }): LineMessage[] {
   const open = adminUrl();
   const chip = open
-    ? chips([{ label: 'เปิดหลังบ้าน', uri: open, icon: 'globe' }])
+    ? chips([{ label: 'เปิดห้องทำงาน', uri: open, icon: 'globe' }])
     : undefined;
 
   /**
