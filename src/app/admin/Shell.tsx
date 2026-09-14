@@ -39,8 +39,11 @@ export function Shell({ children, role }: { children: React.ReactNode; role?: st
   const roleLabel = role ? ROLE_TH[role as AdminRole] : null;
   return (
     <div className="wrap legal admin">
+      {/*
+        ไม่มีรูปปกในห้องทำงาน — ปกมีไว้บอกว่าที่นี่คือ "จำให้นะ" ให้ลูกค้าที่เพิ่งมาถึง
+        แต่คนที่เปิดหน้านี้รู้อยู่แล้วว่ามาทำอะไร ปกจึงเป็นแค่ 150px ที่กินที่ทำงานไปเปล่า ๆ
+      */}
       <header className="hero">
-        <div className="hero-img" role="presentation" />
         <div className="hero-bar">
           <img className="logo" src="/brand/logo.png" alt="" width={44} height={44} />
           <h1>ห้องทำงาน</h1>

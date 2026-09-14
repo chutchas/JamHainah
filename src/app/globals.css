@@ -357,7 +357,14 @@ html, body {
   .adminnav { border-bottom: 1px solid var(--line); padding: 10px 0 8px; margin-bottom: 4px; }
 }
 
-/* ทางออกอยู่มุมขวาบน ไกลจากแท็บที่กดทุกวัน และจางกว่าป้าย admin */
+/*
+ * ห้องทำงานไม่มีรูปปก แถบชื่อจึงไม่ต้องเลื่อนขึ้นไปทับอะไร
+ * (ค่าติดลบเดิมมีไว้ให้แถบชื่อซ้อนขอบล่างของปกเล็กน้อย)
+ */
+.admin .hero { margin-bottom: 8px; }
+.admin .hero-bar { margin-top: 0; border-radius: 0 0 18px 18px; }
+
+/* ทางออกอยู่มุมขวาบน ไกลจากแท็บที่กดทุกวัน และจางกว่าป้ายระดับ */
 .hero-bar .signout {
   display: flex; align-items: center; justify-content: center; flex: none;
   width: 34px; height: 34px; margin-left: 2px;
