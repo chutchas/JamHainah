@@ -79,7 +79,8 @@ async function runOnce() {
     .lte('send_on', today)
     .limit(5000);
 
-  if (error) throw new Error(`cron select: ${error.message}`);
+  if (error) // ข้อความนี้ไปโผล่ในรายงานที่เจ้าของระบบอ่าน — เขียนให้อ่านออกโดยไม่ต้องรู้ศัพท์
+    throw new Error(`อ่านคิวเตือนไม่สำเร็จ: ${error.message}`);
 
   const rows = (data ?? []) as unknown as QueueRow[];
 

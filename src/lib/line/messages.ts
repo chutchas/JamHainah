@@ -1480,19 +1480,66 @@ export function cronReport(s: {
   estimated_cost_thb: number;
   error?: string;
 }): LineMessage[] {
+  const open = adminUrl();
+  const chip = open
+    ? chips([{ label: 'เปิดหลังบ้าน', uri: open, icon: 'globe' }])
+    : undefined;
+
+  /**
+   * ระบบเตือนล้มกลางทาง = ลูกค้าบางคนไม่ได้รับการเตือนวันนี้
+   * ต้องอ่านออกตั้งแต่บรรทัดแรกว่าไม่ใช่รายงานปกติ
+   */
   if (s.error) {
-    return [text(`cron ล้ม ${formatThai(s.today)}\n${s.error.slice(0, 300)}`)];
+    const bad = flexCard(
+      [
+        headRow('ระบบเตือนมีปัญหาเมื่อเช้า', '15-confused'),
+        { type: 'separator', margin: 'md' },
+        {
+          type: 'text', margin: 'md', size: 'sm', wrap: true, color: WARN, weight: 'bold',
+          text: `${formatThai(s.today)} — รอบเตือนไม่จบ`,
+        },
+        { type: 'text', size: 'xs', wrap: true, color: MUTED, text: s.error.slice(0, 300) },
+      ],
+      `ระบบเตือนมีปัญหา ${formatThai(s.today)}`
+    );
+    bad.quickReply = chip;
+    return [bad];
   }
-  const lines = [
-    `cron ${formatThai(s.today)} — ${s.failed > 0 ? 'มีที่ส่งไม่ออก' : 'ปกติ'}`,
-    `คิววันนี้ ${s.queued} · ข้ามไป ${s.skipped}`,
-    `ส่งจริง ${s.messages} ข้อความ · ${s.users} คน`,
-    `ส่งไม่ออก ${s.failed} คน`,
-    `ค่าข้อความ ${s.estimated_cost_thb} บาท`,
+
+  const body: LineMessage[] = [
+    headRow('สรุปประจำวัน', s.failed > 0 ? '12-announce' : '19-calendar'),
+    { type: 'separator', margin: 'md' },
+    {
+      type: 'box', layout: 'vertical', spacing: 'sm', margin: 'md',
+      contents: [
+        row('วันที่', formatThai(s.today)),
+        row('ถึงรอบเตือน', `${s.queued} รายการ`),
+        row('ส่งออกไปแล้ว', `${s.messages} ข้อความ · ${s.users} คน`),
+        row('ส่งไม่ออก', `${s.failed} คน`, s.failed > 0 ? 'warn' : undefined),
+        row('ค่าข้อความ', `${s.estimated_cost_thb} บาท`),
+      ],
+    },
   ];
-  const url = adminUrl();
-  if (url) lines.push('', url);
-  return [text(lines.join('\n'))];
+
+  /**
+   * วันที่ไม่มีใครถึงรอบเตือน ตัวเลขศูนย์เรียงกันห้าบรรทัดอ่านแล้วชวนสงสัยว่าพังไหม
+   * บอกเป็นประโยคว่าปกติ ชัดกว่าปล่อยให้ตีความเอง
+   */
+  body.push({
+    type: 'text', margin: 'md', size: 'sm', wrap: true,
+    weight: s.failed > 0 ? 'bold' : 'regular',
+    color: s.failed > 0 ? WARN : TEAL,
+    text:
+      s.failed > 0
+        ? 'มีคนที่ส่งข้อความไม่ออก ต้องเข้าไปดู'
+        : s.queued === 0
+        ? 'วันนี้ยังไม่มีใครถึงรอบเตือนครับ ระบบปกติดี'
+        : 'ส่งครบทุกคนแล้วครับ',
+  });
+
+  const card = flexCard(body, `สรุปประจำวัน ${formatThai(s.today)}`);
+  card.quickReply = chip;
+  return [card];
 }
 
 /**
