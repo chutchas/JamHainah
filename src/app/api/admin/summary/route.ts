@@ -2,15 +2,15 @@
  * ตัวเลขทั้งหมดของหลังบ้าน — อ่านอย่างเดียว
  *
  * หน้านี้เห็นข้อมูลของลูกค้าทุกคน จึงต้องผ่านสองด่าน:
- *   1. idToken จาก LINE ต้องผ่านการตรวจกับเซิร์ฟเวอร์ของ LINE (เหมือนหน้า LIFF)
- *   2. user id ที่ได้ ต้องอยู่ใน ADMIN_LINE_USER_ID
+ *   1. ต้องรู้ว่าเป็นใคร — คุกกี้ที่เราเซ็นเอง หรือ idToken จาก LINE
+ *   2. user id ที่ได้ ต้องอยู่ใน ADMIN_LINE_USER_ID หรือตาราง admins
  * ไม่มีรหัสผ่านแยก เพราะรหัสที่ต้องจำเพิ่ม คือรหัสที่วันหนึ่งจะหลุด
  *
  * ถ้ายังไม่ได้ตั้ง ADMIN_LINE_USER_ID จะเข้าไม่ได้เลยแม้แต่คนเดียว —
  * ปลอดภัยกว่าการเปิดให้ทุกคนตอนที่ยังไม่ได้ตั้งค่า
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/admin/auth';
+import { requireAdmin, denied } from '@/lib/admin/auth';
 import * as repo from '@/lib/db/repo';
 import { db } from '@/lib/db/client';
 import { todayInBangkok, formatThai } from '@/lib/domain/thaiDate';
@@ -29,8 +29,9 @@ interface EventRow {
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000).toISOString();
 
 export async function GET(req: NextRequest) {
-  const who = await requireAdmin(req);
-  if (!who) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  const gate = await requireAdmin(req);
+  if (!gate.ok) return denied(gate.status);
+  const who = gate.who;
 
   const supabase = db();
   const today = todayInBangkok();

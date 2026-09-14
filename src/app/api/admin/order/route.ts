@@ -6,15 +6,16 @@
  *   order_events ตอบว่างานเดินมาถึงไหน — ไว้ใช้ตอนทำงาน
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/admin/auth';
+import { requireAdmin, denied } from '@/lib/admin/auth';
 import * as repo from '@/lib/db/repo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
-  const who = await requireAdmin(req);
-  if (!who) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  const gate = await requireAdmin(req);
+  if (!gate.ok) return denied(gate.status);
+  const who = gate.who;
 
   const body = (await req.json()) as { id?: string; status?: string; note?: string };
   const id = (body.id ?? '').trim();

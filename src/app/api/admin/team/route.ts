@@ -5,7 +5,7 @@
  * สิทธิ์ที่เปลี่ยนได้โดยไม่มีใครรู้ว่าใครเปลี่ยน คือสิทธิ์ที่เถียงกันไม่จบ
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin, isOwner } from '@/lib/admin/auth';
+import { requireAdmin, isOwner, denied } from '@/lib/admin/auth';
 import * as repo from '@/lib/db/repo';
 
 export const runtime = 'nodejs';
@@ -15,9 +15,12 @@ export const dynamic = 'force-dynamic';
 const LINE_ID = /^U[0-9a-f]{32}$/;
 
 export async function POST(req: NextRequest) {
-  const who = await requireAdmin(req);
-  if (!who) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-  if (!isOwner(who)) return NextResponse.json({ error: 'owner only' }, { status: 403 });
+  const gate = await requireAdmin(req);
+  if (!gate.ok) return denied(gate.status);
+  const who = gate.who;
+  if (!isOwner(who)) {
+    return NextResponse.json({ error: 'เฉพาะเจ้าของระบบเท่านั้นที่เพิ่มหรือถอดผู้ดูแลได้' }, { status: 403 });
+  }
 
   const body = (await req.json()) as {
     lineUserId?: string; role?: 'owner' | 'staff'; displayName?: string; note?: string;

@@ -13,6 +13,12 @@ export const env = {
     get token()  { return req('LINE_CHANNEL_ACCESS_TOKEN'); },
     /** channel ID ของ LINE Login channel (ตัวเลขล้วน) — คนละตัวกับ Messaging API */
     get loginChannelId() { return req('LINE_LOGIN_CHANNEL_ID'); },
+    /**
+     * secret ของ LINE Login channel — ใช้ตอนแลก code เป็น id_token เท่านั้น
+     * คนละตัวกับ LINE_CHANNEL_SECRET ซึ่งเป็นของ Messaging API
+     * ห้ามมี NEXT_PUBLIC_ นำหน้าเด็ดขาด ไม่งั้นมันจะถูกฝังลงหน้าเว็บ
+     */
+    get loginChannelSecret() { return req('LINE_LOGIN_CHANNEL_SECRET'); },
   },
   supabase: {
     get url() { return req('NEXT_PUBLIC_SUPABASE_URL'); },
@@ -25,6 +31,11 @@ export const env = {
     get textModel() { return opt('OPENAI_TEXT_MODEL', 'gpt-4o-mini'); },
   },
   get cronSecret() { return req('CRON_SECRET'); },
+  /**
+   * กุญแจเซ็นคุกกี้หลังบ้าน — เปลี่ยนค่านี้เมื่อไหร่ คนที่ล็อกอินค้างไว้หลุดหมด
+   * ซึ่งเป็นวิธีไล่ทุกคนออกจากระบบที่เร็วที่สุดตอนสงสัยว่ามีของรั่ว
+   */
+  get adminSessionSecret() { return req('ADMIN_SESSION_SECRET'); },
   /**
    * LINE user id ของเจ้าของระบบ — ปลายทางของรายงานหลัง cron ทุกรอบ
    *

@@ -5,8 +5,11 @@ import { useCallback, useEffect, useState } from 'react';
 /**
  * หลังบ้าน — อ่านอย่างเดียว
  *
- * เปิดผ่าน LINE เหมือนหน้าเอกสารของฉัน เพราะเราไม่มีระบบสมาชิกและไม่ควรมี
- * ตัวตนมาจาก idToken ของ LINE แล้วเซิร์ฟเวอร์เช็คว่า user id อยู่ใน allowlist
+ * เข้าด้วย LINE Login แบบเว็บ ไม่ใช่ LIFF — จึงเปิดบนคอมได้ ซึ่งจำเป็น
+ * สำหรับงานที่ต้องพิมพ์เยอะอย่างจัดคิวเอกสาร ส่วนปุ่มในไลน์ก็ยังกดเข้ามาได้เหมือนเดิม
+ * เพราะเบราว์เซอร์ของ LINE รับคุกกี้ได้ปกติ
+ *
+ * ตัวตนอยู่ในคุกกี้ที่เซิร์ฟเวอร์เซ็นไว้ หน้าเว็บไม่ต้องถือ token เองเลย
  *
  * สิ่งที่หน้านี้ต้องตอบให้ได้ในสามวินาทีแรก เรียงตามความเร่ง:
  *   1. มีงานเข้าไหม (คนกด "ให้เราต่อให้")
@@ -14,10 +17,6 @@ import { useCallback, useEffect, useState } from 'react';
  *   3. โมเดลอ่านแม่นแค่ไหน
  * ตัวเลขโตช้าอย่างจำนวนผู้ใช้อยู่ล่างสุด เพราะดูวันละครั้งก็พอ
  */
-
-declare global {
-  interface Window { liff?: any }
-}
 
 interface Lead {
   at: string;
@@ -91,10 +90,9 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 export default function Admin() {
-  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [state, setState] = useState<'loading' | 'ready' | 'error' | 'signedout'>('loading');
   const [message, setMessage] = useState('');
   const [data, setData] = useState<Summary | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [newId, setNewId] = useState('');
 
@@ -105,47 +103,64 @@ export default function Admin() {
    * จะทำให้สองคนเห็นคิวไม่ตรงกัน แล้วรับงานชิ้นเดียวกันซ้อน
    */
   const act = useCallback(async (url: string, body: unknown) => {
-    if (!token) return;
     setBusy(true);
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-liff-id-token': token },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       });
       const out = await res.json().catch(() => ({}));
+      // บัตรหมดอายุกลางคัน — พากลับไปล็อกอินเลย ดีกว่าขึ้นว่าทำรายการไม่สำเร็จเฉย ๆ
+      if (res.status === 401) { window.location.href = '/api/admin/login'; return; }
       if (!res.ok) { setMessage(out.error ?? `ทำรายการไม่สำเร็จ (${res.status})`); return; }
       setMessage('');
-      const fresh = await fetch('/api/admin/summary', { headers: { 'x-liff-id-token': token } });
+      const fresh = await fetch('/api/admin/summary');
       if (fresh.ok) setData(await fresh.json());
     } finally {
       setBusy(false);
     }
-  }, [token]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
+    /**
+     * ข้อความของปัญหาที่เกิดระหว่างเดินทางไป-กลับหน้า LINE
+     * เขียนให้บอกว่า "ต้องไปแก้ตรงไหน" ไม่ใช่แค่บอกว่าพัง
+     */
+    const REASON: Record<string, string> = {
+      bye: 'ออกจากระบบแล้ว',
+      cancelled: 'ยกเลิกการเข้าสู่ระบบ',
+      state: 'ลิงก์เข้าสู่ระบบหมดอายุ ลองกดเข้าใหม่อีกครั้ง',
+      exchange: 'ต่อกับ LINE ไม่สำเร็จ — ตรวจ LINE_LOGIN_CHANNEL_SECRET และ Callback URL ในคอนโซล LINE',
+      verify: 'LINE ไม่รับรองการเข้าสู่ระบบนี้',
+    };
+
     async function boot() {
+      const params = new URLSearchParams(window.location.search);
+      const reason = params.get('e');
+      // เพิ่งกลับมาจากหน้าล็อกอินสด ๆ — ถ้ายังไม่ผ่านอีก ห้ามเด้งไปล็อกอินซ้ำ
+      const justLoggedIn = params.get('ok') === '1';
+
+      if (reason && REASON[reason]) {
+        setMessage(REASON[reason]);
+        setState('signedout');
+        return;
+      }
+
       try {
-        const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
-        if (!liffId) throw new Error('ยังไม่ได้ตั้งค่า LIFF ID');
+        const res = await fetch('/api/admin/summary');
 
-        await new Promise<void>((resolve, reject) => {
-          if (window.liff) return resolve();
-          const el = document.createElement('script');
-          el.src = 'https://static.line-scdn.net/liff/edge/2/sdk.js';
-          el.onload = () => resolve();
-          el.onerror = () => reject(new Error('โหลด LINE SDK ไม่สำเร็จ'));
-          document.head.appendChild(el);
-        });
-
-        await window.liff.init({ liffId });
-        if (!window.liff.isLoggedIn()) { window.liff.login(); return; }
-
-        const idToken = window.liff.getIDToken();
-        setToken(idToken);
-        const res = await fetch('/api/admin/summary', { headers: { 'x-liff-id-token': idToken } });
+        if (res.status === 401) {
+          if (justLoggedIn) {
+            setMessage('เข้าสู่ระบบแล้วแต่เบราว์เซอร์ไม่เก็บคุกกี้ — ลองปิดโหมดไม่ระบุตัวตน หรือเปิดในเบราว์เซอร์ปกติ');
+            setState('signedout');
+            return;
+          }
+          window.location.href = '/api/admin/login';
+          return;
+        }
         if (res.status === 403) throw new Error('บัญชีนี้ไม่ใช่ผู้ดูแลระบบ');
         if (!res.ok) throw new Error(`โหลดข้อมูลไม่สำเร็จ (${res.status})`);
 
@@ -164,7 +179,22 @@ export default function Admin() {
   }, []);
 
   if (state === 'loading') return <Shell><p>กำลังโหลด…</p></Shell>;
-  if (state === 'error' || !data) return <Shell><p className="warn">{message}</p></Shell>;
+  if (state === 'signedout') {
+    return (
+      <Shell>
+        <p>{message}</p>
+        <p className="acts"><a className="pill" href="/api/admin/login">เข้าสู่ระบบด้วย LINE</a></p>
+      </Shell>
+    );
+  }
+  if (state === 'error' || !data) {
+    return (
+      <Shell>
+        <p className="warn">{message}</p>
+        <p className="acts"><a className="pill" href="/api/admin/logout">ออกจากระบบ</a></p>
+      </Shell>
+    );
+  }
 
   const { overview, reminders, reading, leads, orders, team, me } = data;
   const open = orders.filter((o) => ['new', 'accepted', 'in_progress'].includes(o.status));
@@ -353,6 +383,9 @@ export default function Admin() {
         ข้อมูลลูกค้าแก้ที่ Supabase — หน้านี้แก้ได้เฉพาะสถานะงานกับสิทธิ์ของทีม
         และทุกการเปลี่ยนแปลงถูกบันทึกว่าใครทำ
       </p>
+
+      {/* เครื่องที่ไม่ใช่ของเรา ต้องมีทางออกที่หาเจอโดยไม่ต้องถามใคร */}
+      <p className="acts"><a className="pill" href="/api/admin/logout">ออกจากระบบ</a></p>
     </Shell>
   );
 }

@@ -7,13 +7,20 @@ import path from 'node:path';
  * หน้าหลังบ้านเห็นข้อมูลของลูกค้าทุกคน
  *
  * ด่านที่กันไว้มีสองชั้น และต้องมีครบทั้งคู่ในทุก route ใต้ /api/admin:
- *   1. authenticateLiff — idToken ต้องผ่านการตรวจกับเซิร์ฟเวอร์ของ LINE
- *      (ไม่งั้นใครก็ปลอม header มาเองได้)
- *   2. env.adminUserIds — user id ที่ผ่านด่านแรก ต้องอยู่ใน allowlist
+ *   1. รู้ว่าเป็นใคร — คุกกี้ที่เราเซ็นเอง หรือ idToken ที่ตรวจกับ LINE แล้ว
+ *      (ไม่งั้นใครก็ปลอม header หรือคุกกี้มาเองได้)
+ *   2. env.adminUserIds หรือตาราง admins — คนนั้นต้องเป็นผู้ดูแล
  *      (ไม่งั้นลูกค้าทุกคนที่มี LINE ก็เปิดหน้านี้ได้)
  *
  * test นี้มีเพราะ route ที่เพิ่มทีหลังคือ route ที่คนลืมใส่ด่าน
  */
+/**
+ * สาม route ของการล็อกอินเอง เป็นข้อยกเว้นเดียวที่ไม่ผ่าน requireAdmin
+ * — มันคือประตู ไม่ใช่ห้องที่อยู่หลังประตู
+ * ต้องเขียนชื่อไว้ตรงนี้ทีละอัน เพื่อให้การเพิ่มข้อยกเว้นใหม่เป็นเรื่องที่ต้องตั้งใจทำ
+ */
+const AUTH_ROUTES = ['login', 'callback', 'logout'];
+const isAuthRoute = (f: string) => AUTH_ROUTES.includes(path.basename(path.dirname(f)));
 test('ทุก API ใต้ /api/admin ต้องผ่านทั้ง LINE และ allowlist', () => {
   const dir = path.resolve(import.meta.dirname, '..', 'src', 'app', 'api', 'admin');
   if (!fs.existsSync(dir)) return;
@@ -32,9 +39,47 @@ test('ทุก API ใต้ /api/admin ต้องผ่านทั้ง LI
   for (const f of files) {
     const src = fs.readFileSync(f, 'utf8');
     const rel = path.relative(path.resolve(import.meta.dirname, '..'), f);
+    if (isAuthRoute(f)) {
+      // ประตูห้ามหยิบข้อมูลของใครออกมา หน้าที่มันคือพาไปล็อกอินแล้วออกบัตรเท่านั้น
+      assert.ok(!src.includes("@/lib/db/"), `${rel} เป็น route ล็อกอินแต่แตะฐานข้อมูล`);
+      continue;
+    }
     // ต้องผ่านด่านกลางเสมอ — ห้ามเช็คสิทธิ์เองทีละ route
     // ด่านที่เขียนซ้ำหลายที่ คือด่านที่วันหนึ่งจะมีที่หนึ่งเช็คไม่ครบ
     assert.match(src, /requireAdmin/, `${rel} ไม่ได้ผ่าน requireAdmin`);
+  }
+});
+
+/**
+ * 401 กับ 403 ต้องแยกจากกัน
+ *
+ * เคยรวมเป็น 403 เหมือนกันหมด ผลคือคนที่แค่ยังไม่ได้ล็อกอิน
+ * ถูกบอกว่า "ไม่ใช่ผู้ดูแลระบบ" แล้วเสียเวลาไปไล่หาสิทธิ์ที่ไม่ได้เสียเลย
+ * ข้อความที่บอกสาเหตุผิด แพงกว่าไม่มีข้อความ
+ */
+test('ด่านต้องแยก "ไม่รู้ว่าเป็นใคร" ออกจาก "ไม่ใช่ผู้ดูแล"', () => {
+  const auth = fs.readFileSync(
+    path.resolve(import.meta.dirname, '..', 'src', 'lib', 'admin', 'auth.ts'), 'utf8');
+  assert.match(auth, /status: 401/, 'ไม่มีทาง 401 เลย');
+  assert.match(auth, /status: 403/, 'ไม่มีทาง 403 เลย');
+
+  const page = fs.readFileSync(
+    path.resolve(import.meta.dirname, '..', 'src', 'app', 'admin', 'page.tsx'), 'utf8');
+  assert.ok(
+    page.includes("res.status === 401") && page.includes("/api/admin/login"),
+    'หน้าหลังบ้านเจอ 401 แล้วต้องพาไปล็อกอิน',
+  );
+});
+
+/**
+ * หน้าหลังบ้านต้องเปิดบนคอมได้ จึงห้ามพึ่ง LIFF SDK ซึ่งทำงานได้เฉพาะในแอป LINE
+ * ความพังของแบบเดิมคือเงียบ — หน้าเปิดได้ แต่ไม่มี token แล้วไปโผล่เป็น 403
+ */
+test('หน้าหลังบ้านต้องไม่เรียก LIFF SDK', () => {
+  const page = fs.readFileSync(
+    path.resolve(import.meta.dirname, '..', 'src', 'app', 'admin', 'page.tsx'), 'utf8');
+  for (const bad of ['liff.init', 'getIDToken', 'static.line-scdn.net']) {
+    assert.ok(!page.includes(bad), `หน้าหลังบ้านยังเรียก ${bad} อยู่`);
   }
 });
 
