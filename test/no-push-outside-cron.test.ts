@@ -12,6 +12,9 @@ import path from 'node:path';
  */
 
 const ALLOWED = [
+  // เครื่องยนต์การเตือน — ที่เดียวที่รู้กติกาว่าแถวไหนควรส่ง
+  // ทั้งรอบเช้าและปุ่มยิงซ้ำในหน้าหลังบ้าน ต้องเดินผ่านไฟล์นี้เท่านั้น
+  'src/lib/reminders/engine.ts',
   'src/lib/reminders/run.ts',
   'src/lib/line/client.ts',
   // ข้อยกเว้นที่แคบที่สุด: ส่งได้เฉพาะหาเจ้าของระบบ มี test บังคับด้านล่าง
@@ -67,6 +70,28 @@ test('handlers.ts ใช้ reply เท่านั้น', () => {
  * ฟังก์ชันที่รับ userId เป็นพารามิเตอร์ได้ คือฟังก์ชันที่วันหนึ่งจะถูกเรียก
  * ด้วย userId ของลูกค้า แล้วค่าส่งข้อความจะขึ้นโดยไม่มีใครสังเกต
  */
+/**
+ * ปุ่มยิงซ้ำในหน้าหลังบ้าน ต้องไม่ยิงเอง
+ *
+ * ถ้ามันเรียก push() ตรง ๆ ได้ ก็แปลว่ามีทางส่งข้อความที่ข้ามการเช็ค
+ * ว่าเอกสารถูกเก็บไปแล้วหรือยัง — ซึ่งเป็นการส่งที่เสียทั้งเงินและความเชื่อใจ
+ */
+test('เส้นทางหลังบ้านต้องยิงผ่านเครื่องยนต์เดิมเท่านั้น', () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const dir = path.join(root, 'src/app/api/admin');
+  if (!fs.existsSync(dir)) return;
+
+  for (const file of walk(dir)) {
+    const src = fs.readFileSync(file, 'utf8');
+    const rel = path.relative(root, file).split(path.sep).join('/');
+    // ตรวจเฉพาะ push — route ล็อกอินต้องใช้ verifyLiffIdToken จากไฟล์เดียวกันได้ตามปกติ
+    assert.ok(
+      !/import\s*\{[^}]*\bpush\b[^}]*\}\s*from\s*['"][^'"]*line\/client['"]/.test(src),
+      `${rel} ยิงข้อความเองโดยไม่ผ่าน engine`,
+    );
+  }
+});
+
 test('notifyAdmin ส่งได้เฉพาะหาเจ้าของระบบ', () => {
   const root = path.resolve(import.meta.dirname, '..');
   const src = fs.readFileSync(path.join(root, 'src/lib/line/admin.ts'), 'utf8');

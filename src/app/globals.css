@@ -310,3 +310,86 @@ html, body {
   width: 100%; padding: 11px 12px; font-size: 14px; font-family: inherit;
   border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink);
 }
+
+/* ------------------------------------------------------------
+   หลังบ้านบนจอคอม
+   ------------------------------------------------------------
+   ทุกอย่างในบล็อกนี้ขึ้นต้นด้วย .admin เสมอ
+   หน้า "เอกสารของฉัน" ของลูกค้าใช้ .wrap ตัวเดียวกัน แต่ไม่มี .admin
+   ถ้าเผลอเขียนกฎที่ไม่มี .admin นำหน้า หน้าลูกค้าบนมือถือจะเพี้ยนตาม
+   โดยที่เราไม่ได้เปิดดูมันอีกเลยหลังแก้
+   ------------------------------------------------------------ */
+.adminnav {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  padding: 10px 0 2px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.adminnav a {
+  font-size: 13.5px; font-weight: 600; color: var(--ink-2); text-decoration: none;
+  padding: 7px 12px; border-radius: 999px; line-height: 1;
+}
+.adminnav a:hover { background: var(--ground); }
+/* หน้าที่กำลังเปิดอยู่ ต้องดูต่างจากลิงก์อื่นโดยไม่ต้องอ่าน */
+.adminnav a.on { background: var(--green-wash); color: var(--green); }
+/* ออกจากระบบไปอยู่ขวาสุดเสมอ — ปุ่มที่กดแล้วย้อนกลับยาก ไม่ควรอยู่ติดปุ่มที่กดบ่อย */
+.adminnav a.out { margin-left: auto; color: var(--ink-3); font-weight: 500; }
+
+.admin .pill.go {
+  background: var(--green-wash); color: var(--green); text-decoration: none;
+  display: inline-block; padding: 7px 14px; font-size: 13px;
+}
+.admin .note.ok { color: var(--green); font-weight: 600; }
+.admin .sheet-card h3 { font-size: 17px; font-weight: 700; color: var(--ink); margin: 0 0 8px; }
+
+/* ---- รายการเตือนที่ค้าง ---- */
+.admin .stuck { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 2px; }
+.admin .stuckrow {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px;
+  font-size: 13px; padding: 6px 0; border-top: 1px solid var(--line);
+}
+/* แถวที่ระบบจะข้ามอยู่ดี ต้องจางลง ไม่ใช่หายไป — คนกดต้องรู้ว่ามันมีอยู่ */
+.admin .stuckrow.off { opacity: .55; }
+.admin .stuckrow .what { font-weight: 600; color: var(--ink); }
+.admin .stuckrow .when { color: var(--ink-3); }
+.admin .stuckrow .why {
+  flex-basis: 100%; font-size: 11.5px; color: var(--ink-3); word-break: break-word;
+}
+.admin .tagx {
+  font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 8px;
+  background: var(--ground); color: var(--ink-3);
+}
+.admin .tagx.failed, .admin .tagx.warn { background: var(--warn-wash); color: var(--warn); }
+
+/*
+ * สองคอลัมน์เฉพาะจอกว้าง — บนมือถือยังเรียงลงมาเหมือนเดิมทุกประการ
+ * 900px คือจุดที่สองคอลัมน์ยังอ่านสบาย ไม่ใช่จุดที่มันเริ่มยัดลงได้
+ */
+.admin .cols { display: flex; flex-direction: column; }
+
+@media (min-width: 900px) {
+  /* กว้างขึ้นเฉพาะหลังบ้าน เพราะที่นี่เอาไว้กวาดสายตาหาของ ไม่ใช่อ่านเรียงบรรทัด */
+  .admin.wrap { max-width: 1040px; padding-bottom: 64px; }
+  .admin .hero-img { height: 150px; }
+
+  .admin .cols {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; align-items: start;
+  }
+  /* หัวข้อแรกของแต่ละคอลัมน์ต้องอยู่ระดับเดียวกัน ไม่งั้นสองฝั่งดูเหลื่อม */
+  .admin .cols > section > h2:first-child { margin-top: 18px; }
+
+  .admin .tiles { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .admin .tile { padding: 14px 14px; }
+  .admin .tile .n { font-size: 24px; }
+  .admin .tile .l { font-size: 12.5px; }
+
+  /* ปุ่มบนจอคอมกดด้วยเมาส์ ไม่ต้องกว้างเต็มแถวเหมือนบนมือถือ
+     ต้องล้าง width:100% ของ .btn ด้วย ไม่งั้นปุ่มที่สองล้นออกนอกการ์ดจนอ่านไม่เห็น */
+  .admin .acts { flex-wrap: wrap; }
+  .admin .acts .btn { flex: 0 0 auto; width: auto; min-width: 128px; }
+  .admin .addrow { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: start; }
+  .admin .addrow .note { grid-column: 1 / -1; }
+  .admin .addrow .btn { width: auto; min-width: 150px; }
+
+  .admin .lead { padding: 14px 16px; }
+  .admin .stuckrow { font-size: 13.5px; }
+}

@@ -14,26 +14,14 @@
  *     1 ข้อความสำหรับ "ครบกำหนดแล้ว" (ฉาก 08) ซึ่งต้องการคำตอบรายใบ
  */
 import { db } from '@/lib/db/client';
-import { push } from '@/lib/line/client';
-import { upcomingReminder, dueReminder, cronReport, type ReminderItem } from '@/lib/line/messages';
+import { cronReport } from '@/lib/line/messages';
 import { todayInBangkok } from '@/lib/domain/thaiDate';
 import { notifyAdmin } from '@/lib/line/admin';
 import { track, purgeFinishedOrders } from '@/lib/db/repo';
 import { loadRenewActions } from '@/lib/domain/renewActions';
-
-interface QueueRow {
-  id: string;
-  document_id: string;
-  line_user_id: string;
-  send_on: string;
-  offset_days: number;
-  kind: 'upcoming' | 'due';
-  documents: {
-    id: string; doc_type: string; label: string | null;
-    expiry_date: string; archived_at: string | null; confirmed_by_user: boolean;
-  } | null;
-  users: { unfollowed_at: string | null; deleted_at: string | null } | null;
-}
+import {
+  QUEUE_SELECT, groupByUser, isDead, markFailed, sendToUser, type QueueRow,
+} from '@/lib/reminders/engine';
 
 /**
  * บอกเจ้าของระบบว่ารอบนี้เป็นยังไง
@@ -70,11 +58,7 @@ async function runOnce() {
   // คิวของวันนี้และที่ค้างมาจากวันก่อน (เผื่อ cron ล่ม)
   const { data, error } = await supabase
     .from('reminder_queue')
-    .select(
-      'id, document_id, line_user_id, send_on, offset_days, kind,' +
-      'documents ( id, doc_type, label, expiry_date, archived_at, confirmed_by_user ),' +
-      'users ( unfollowed_at, deleted_at )'
-    )
+    .select(QUEUE_SELECT)
     .eq('status', 'pending')
     .lte('send_on', today)
     .limit(5000);
@@ -88,13 +72,7 @@ async function runOnce() {
   const skip: string[] = [];
   const live: QueueRow[] = [];
   for (const r of rows) {
-    const doc = r.documents;
-    const usr = r.users;
-    const dead =
-      !doc || doc.archived_at !== null ||          // "ไม่ได้ใช้รถคันนี้แล้ว"
-      !doc.confirmed_by_user ||                    // ยังไม่กดยืนยัน = ยังไม่รับประกันความถูกต้อง
-      !usr || usr.unfollowed_at !== null || usr.deleted_at !== null;
-    if (dead) skip.push(r.id);
+    if (isDead(r)) skip.push(r.id);   // เอกสารถูกเก็บ · ยังไม่ยืนยัน · ผู้ใช้บล็อกหรือลบบัญชีแล้ว
     else live.push(r);
   }
   if (skip.length) {
@@ -102,64 +80,27 @@ async function runOnce() {
   }
 
   // ---- กฎข้อ 4: group ตาม user ก่อนส่ง ----
-  const byUser = new Map<string, { upcoming: QueueRow[]; due: QueueRow[] }>();
-  for (const r of live) {
-    let bucket = byUser.get(r.line_user_id);
-    if (!bucket) { bucket = { upcoming: [], due: [] }; byUser.set(r.line_user_id, bucket); }
-    bucket[r.kind].push(r);
-  }
+  const byUser = groupByUser(live);
 
   let sentMessages = 0;
   let sentUsers = 0;
   const failed: string[] = [];
 
   for (const [userId, bucket] of byUser) {
-    const ok: string[] = [];
     try {
-      if (bucket.upcoming.length) {
-        const items = bucket.upcoming.map(toItem);
-        // พิกัดหยาบที่เขาเคยแชร์ไว้ — ทำให้ลิงก์ "ใกล้ฉัน" ค้นรอบตัวเขาจริง ๆ
-        // ไม่มีก็ยังกดได้ แค่ Maps ใช้ตำแหน่งของเครื่องเป็นจุดตั้งต้นแทน
-        /**
-         * ไม่ส่งพิกัดไปกับลิงก์แผนที่
-         *
-         * พิกัดที่เก็บไว้บอกได้แค่ว่าเขาเคยอยู่ตรงไหน ไม่ใช่ตอนนี้อยู่ตรงไหน
-         * คนที่ต้องไปต่อภาษีคือคนที่กำลังเดินทาง — เก็บไว้ตอนอยู่กรุงเทพ
-         * แล้วกดตอนอยู่ชลบุรี ก็ได้ที่ว่าการอำเภอผิดจังหวัด
-         *
-         * ลิงก์แบบ ?api=1&query= ให้ Google Maps ใช้ GPS ของเครื่อง ณ วินาทีที่กด
-         * ซึ่งเป็นสิ่งเดียวที่ตรงกับคำว่า "ใกล้ฉัน" จริง ๆ
-         */
-        await push(userId, upcomingReminder(items, today, actionsByType));
-        sentMessages++;
-        ok.push(...bucket.upcoming.map((r) => r.id));
-      }
-      if (bucket.due.length) {
-        const items = bucket.due.map(toItem);
-        await push(userId, dueReminder(items));
-        sentMessages++;
-        ok.push(...bucket.due.map((r) => r.id));
-      }
+      /**
+       * ไม่ส่งพิกัดไปกับลิงก์แผนที่
+       *
+       * พิกัดที่เก็บไว้บอกได้แค่ว่าเขาเคยอยู่ตรงไหน ไม่ใช่ตอนนี้อยู่ตรงไหน
+       * คนที่ต้องไปต่อภาษีคือคนที่กำลังเดินทาง — เก็บไว้ตอนอยู่กรุงเทพ
+       * แล้วกดตอนอยู่ชลบุรี ก็ได้ที่ว่าการอำเภอผิดจังหวัด
+       */
+      sentMessages += await sendToUser(supabase, userId, bucket, today, actionsByType);
       sentUsers++;
-
-      await supabase
-        .from('reminder_queue')
-        .update({ status: 'sent', sent_at: new Date().toISOString() })
-        .in('id', ok);
-
-      await track('reminder_sent', userId, {
-        upcoming: bucket.upcoming.length,
-        due: bucket.due.length,
-        messages: (bucket.upcoming.length ? 1 : 0) + (bucket.due.length ? 1 : 0),
-      });
     } catch (err) {
       failed.push(userId);
-      const ids = [...bucket.upcoming, ...bucket.due].map((r) => r.id);
-      await supabase
-        .from('reminder_queue')
-        .update({ status: 'failed', error: String(err).slice(0, 500) })
-        .in('id', ids);
-      console.error('[cron] push failed', userId, err);
+      await markFailed(supabase, [...bucket.upcoming, ...bucket.due].map((r) => r.id), err);
+      console.error('[reminders] push failed', userId, err);
     }
   }
 
@@ -206,14 +147,4 @@ async function runOnce() {
   }
 
   return summary;
-}
-
-function toItem(r: QueueRow): ReminderItem {
-  return {
-    documentId: r.document_id,
-    typeKey: r.documents!.doc_type,
-    label: r.documents!.label,
-    expiry: r.documents!.expiry_date,
-    offsetDays: r.offset_days,
-  };
 }

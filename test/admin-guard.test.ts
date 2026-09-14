@@ -63,12 +63,39 @@ test('ด่านต้องแยก "ไม่รู้ว่าเป็น
   assert.match(auth, /status: 401/, 'ไม่มีทาง 401 เลย');
   assert.match(auth, /status: 403/, 'ไม่มีทาง 403 เลย');
 
-  const page = fs.readFileSync(
-    path.resolve(import.meta.dirname, '..', 'src', 'app', 'admin', 'page.tsx'), 'utf8');
+  // การจัดการตัวตนอยู่ใน Shell ที่เดียว — ทุกหน้าหลังบ้านต้องผ่านมัน
+  const shell = fs.readFileSync(
+    path.resolve(import.meta.dirname, '..', 'src', 'app', 'admin', 'Shell.tsx'), 'utf8');
   assert.ok(
-    page.includes("res.status === 401") && page.includes("/api/admin/login"),
-    'หน้าหลังบ้านเจอ 401 แล้วต้องพาไปล็อกอิน',
+    shell.includes('res.status === 401') && shell.includes('/api/admin/login'),
+    'เจอ 401 แล้วต้องพาไปล็อกอิน',
   );
+  assert.ok(shell.includes('res.status === 403'), 'ต้องแยก 403 ออกมาบอกว่าไม่ใช่ผู้ดูแล');
+});
+
+/**
+ * ทุกหน้าใต้ /admin ต้องผ่าน Shell
+ *
+ * หน้าที่โหลดข้อมูลเอง คือหน้าที่วันหนึ่งจะลืมจัดการ 401
+ * แล้วขึ้นหน้าเปล่าให้คนที่แค่ยังไม่ได้ล็อกอิน
+ */
+test('ทุกหน้าหลังบ้านต้องใช้ Shell ตัวเดียวกัน', () => {
+  const dir = path.resolve(import.meta.dirname, '..', 'src', 'app', 'admin');
+  const walk = (d: string, out: string[] = []): string[] => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, e.name);
+      if (e.isDirectory()) walk(full, out);
+      else if (e.name === 'page.tsx') out.push(full);
+    }
+    return out;
+  };
+  const pages = walk(dir);
+  assert.ok(pages.length >= 3, 'หน้าหลังบ้านหายไป');
+  for (const f of pages) {
+    const src = fs.readFileSync(f, 'utf8');
+    const rel = path.relative(path.resolve(import.meta.dirname, '..'), f);
+    assert.match(src, /useAdmin/, `${rel} โหลดข้อมูลเองโดยไม่ผ่าน Shell`);
+  }
 });
 
 /**
