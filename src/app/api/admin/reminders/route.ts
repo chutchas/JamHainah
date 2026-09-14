@@ -40,6 +40,7 @@ async function loadStuck(today: string): Promise<QueueRow[]> {
 export async function GET(req: NextRequest) {
   const gate = await requireAdmin(req);
   if (!gate.ok) return denied(gate.status);
+  const who = gate.who;
 
   const today = todayInBangkok();
   const rows = await loadStuck(today);
@@ -73,7 +74,8 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  return NextResponse.json({ today, people });
+  // ระดับของคนที่กำลังดู — Shell เอาไปขึ้นเป็นป้ายมุมขวา
+  return NextResponse.json({ today, people, me: { role: who.role } });
 }
 
 /**

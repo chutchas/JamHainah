@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     services: SERVICES.map((s) => ({ key: s, label: SERVICE_TH[s] })),
     seesMoney,
+    me: { role: who.role },
     cases: rows.map((o) => ({
       id: o.id,
       status: o.status,

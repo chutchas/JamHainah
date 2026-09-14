@@ -14,7 +14,7 @@ interface CaseDetail {
   note: string | null; vehicle: Record<string, string>;
   purgeAfterThai: string | null; purged: boolean;
   document: { label: string; expiryThai: string } | null;
-  seesMoney: boolean; canEdit: boolean;
+  seesMoney: boolean; canEdit: boolean; me: { role: string };
   priceThb: number | null; paid: boolean;
   events: EventRow[];
 }
@@ -48,7 +48,7 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
   const vehicle = car ?? data.vehicle ?? {};
 
   return (
-    <Shell>
+    <Shell role={data.me.role}>
       <p className="note left"><a href="/admin/cases">← กลับไปรายการเคส</a></p>
 
       <h2>{data.name ?? 'ผู้ใช้'} · {data.serviceLabel}</h2>

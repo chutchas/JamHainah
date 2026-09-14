@@ -36,7 +36,7 @@ export default function AdminHome() {
   const stuck = reminders.failedQueue;
 
   return (
-    <Shell>
+    <Shell role={data.me.role}>
       <p className="note left">ข้อมูล ณ {new Date().toLocaleString('th-TH')}</p>
       {message && <p className="warn">{message}</p>}
 

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { ROLE_TH, type AdminRole } from '@/lib/domain/roles';
 
 /**
  * โครงหน้าห้องทำงาน — ใช้ร่วมกันทั้งสามหน้า
@@ -23,8 +24,19 @@ const NAV = [
   { href: '/admin/team', label: 'ทีม' },
 ];
 
-export function Shell({ children }: { children: React.ReactNode }) {
+/**
+ * ป้ายมุมขวาบอก "ระดับของคนที่กำลังดูอยู่" ไม่ใช่ "นี่คือหน้า admin"
+ *
+ * อย่างหลังเข้ามาถึงหน้านี้ได้ก็รู้อยู่แล้ว ส่วนอย่างแรกตอบคำถามที่เกิดจริง:
+ * พนักงานที่ไม่เห็นราคาหรือกดยิงซ้ำไม่ได้ จะรู้ว่าเพราะระดับของตัวเอง
+ * ไม่ใช่เพราะระบบพัง แล้วไม่ต้องไปถามใคร
+ *
+ * ยังไม่รู้ระดับ (หน้ากำลังโหลด หรือยังไม่ผ่านด่าน) = ไม่ต้องขึ้นป้าย
+ * ป้ายที่เดาไว้ก่อนแล้วเปลี่ยนทีหลัง แย่กว่าป้ายที่ยังไม่มา
+ */
+export function Shell({ children, role }: { children: React.ReactNode; role?: string }) {
   const here = usePathname();
+  const roleLabel = role ? ROLE_TH[role as AdminRole] : null;
   return (
     <div className="wrap legal admin">
       <header className="hero">
@@ -32,7 +44,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <div className="hero-bar">
           <img className="logo" src="/brand/logo.png" alt="" width={44} height={44} />
           <h1>ห้องทำงาน</h1>
-          <span className="tag">admin</span>
+          {roleLabel && <span className="tag">{roleLabel}</span>}
           {/*
             ออกจากระบบเป็นไอคอน อยู่ไกลจากแท็บที่กดทุกวัน
             กดพลาดแล้วแค่ล็อกอินใหม่ ไม่มีอะไรหาย จึงยอมแลกกับพื้นที่ที่ได้คืน

@@ -58,6 +58,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     document,
     seesMoney,
     canEdit: can(who, 'queue'),
+    me: { role: who.role },
     priceThb: seesMoney ? order.price_thb : null,
     paid: order.paid_at !== null,
     events: events.map((e) => ({

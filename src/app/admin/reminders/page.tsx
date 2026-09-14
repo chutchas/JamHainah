@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Shell, Gate, useAdmin } from '../Shell';
 import type { StuckPerson } from '../types';
 
-interface Payload { today: string; people: StuckPerson[] }
+interface Payload { today: string; people: StuckPerson[]; me: { role: string } }
 
 /**
  * รายการเตือนที่ยังไม่ได้ยิง
@@ -33,7 +33,7 @@ export default function Reminders() {
   }
 
   return (
-    <Shell>
+    <Shell role={data.me.role}>
       <h2>รายการค้าง ({totalItems} รายการ · {people.length} คน)</h2>
       {message && <p className="warn">{message}</p>}
       {note && <p className="note left ok">{note}</p>}

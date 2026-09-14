@@ -68,6 +68,29 @@ test('ปุ่มที่เสียเงินต้องมีด่า�
     'ยิงซ้ำไม่มีด่านสิทธิ์');
 });
 
+/**
+ * ป้ายมุมขวาต้องบอกระดับของคนที่กำลังดู ไม่ใช่คำว่า admin เฉย ๆ
+ *
+ * พนักงานที่ไม่เห็นราคาหรือกดยิงซ้ำไม่ได้ ต้องรู้ว่าเพราะระดับของตัวเอง
+ * ไม่ใช่เพราะระบบพัง — หน้าใหม่ที่ลืมส่งระดับเข้า Shell จะทำให้ป้ายหายเงียบ ๆ
+ */
+test('ทุกหน้าต้องส่งระดับของคนที่ดูอยู่เข้า Shell', () => {
+  const dir = path.join(root, 'src', 'app', 'admin');
+  const walk = (d: string, out: string[] = []): string[] => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, e.name);
+      if (e.isDirectory()) walk(full, out);
+      else if (e.name === 'page.tsx') out.push(full);
+    }
+    return out;
+  };
+  for (const f of walk(dir)) {
+    const src = fs.readFileSync(f, 'utf8');
+    const rel = path.relative(root, f);
+    assert.match(src, /<Shell role=\{/, `${rel} ไม่ได้ส่งระดับเข้า Shell`);
+  }
+});
+
 /** เปลี่ยนระดับตัวเองได้ = เจ้าของคนเดียวที่เผลอลดตัวเอง จะไม่มีใครเลื่อนกลับให้ */
 test('แตะระดับหรือสิทธิ์ของตัวเองไม่ได้', () => {
   const src = read('src/app/api/admin/team/route.ts');

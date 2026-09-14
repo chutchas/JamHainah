@@ -13,6 +13,7 @@ interface Payload {
   services: Array<{ key: string; label: string }>;
   seesMoney: boolean;
   cases: CaseRow[];
+  me: { role: string };
 }
 
 const OPEN = ['new', 'accepted', 'in_progress'];
@@ -53,7 +54,7 @@ export default function Cases() {
   }
 
   return (
-    <Shell>
+    <Shell role={data.me.role}>
       <h2>เคส ({open.length} ชิ้นที่ยังไม่จบ)</h2>
       {message && <p className="warn">{message}</p>}
 

@@ -22,7 +22,7 @@ export default function Team() {
   const owner = me.role === 'owner';
 
   return (
-    <Shell>
+    <Shell role={data.me.role}>
       <h2>ทีม ({team.filter((m) => !m.disabled).length} คนที่ใช้งานได้)</h2>
       {message && <p className="warn">{message}</p>}
 
