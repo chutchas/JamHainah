@@ -11,6 +11,10 @@ import { usePathname } from 'next/navigation';
  *
  * เมนูอยู่ตรงนี้ที่เดียว เพิ่มหน้าใหม่แล้วทุกหน้าเห็นพร้อมกัน
  * — เมนูที่ก๊อปไว้ทุกหน้า คือเมนูที่วันหนึ่งจะมีหน้าหนึ่งตกหล่น
+ *
+ * มาร์กอัปชุดเดียวทั้งสองจอ ต่างกันแค่ CSS:
+ * จอคอมเป็นแถบบน · มือถือย้ายลงล่างให้นิ้วโป้งถึง
+ * ถ้าแยกเป็นสองก้อน วันหนึ่งจะมีเมนูหนึ่งที่ลืมเพิ่มหน้าใหม่เข้าไป
  */
 const NAV = [
   { href: '/admin', label: 'สรุป' },
@@ -29,6 +33,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <img className="logo" src="/brand/logo.png" alt="" width={44} height={44} />
           <h1>ห้องทำงาน</h1>
           <span className="tag">admin</span>
+          {/*
+            ออกจากระบบเป็นไอคอน อยู่ไกลจากแท็บที่กดทุกวัน
+            กดพลาดแล้วแค่ล็อกอินใหม่ ไม่มีอะไรหาย จึงยอมแลกกับพื้นที่ที่ได้คืน
+          */}
+          <a className="signout" href="/api/admin/logout" title="ออกจากระบบ" aria-label="ออกจากระบบ">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </a>
         </div>
       </header>
 
@@ -43,7 +59,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
             {n.label}
           </a>
         ))}
-        <a className="out" href="/api/admin/logout">ออกจากระบบ</a>
       </nav>
 
       {children}

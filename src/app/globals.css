@@ -320,19 +320,50 @@ html, body {
    โดยที่เราไม่ได้เปิดดูมันอีกเลยหลังแก้
    ------------------------------------------------------------ */
 .adminnav {
-  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
-  padding: 10px 0 2px; margin-bottom: 4px;
-  border-bottom: 1px solid var(--line);
+  display: flex; gap: 6px; align-items: stretch;
 }
+/*
+ * ทุกแท็บกว้างเท่ากันและกินเต็มแถว — ระยะจากตาถึงแท็บถัดไปเท่ากันทุกอัน
+ * และไม่มีแท็บไหนเล็กจนกดพลาดเพราะชื่อมันสั้นกว่าเพื่อน
+ */
 .adminnav a {
+  flex: 1 1 0; text-align: center;
   font-size: 13.5px; font-weight: 600; color: var(--ink-2); text-decoration: none;
-  padding: 7px 12px; border-radius: 999px; line-height: 1;
+  padding: 10px 6px; border-radius: 10px; line-height: 1.3;
 }
 .adminnav a:hover { background: var(--ground); }
 /* หน้าที่กำลังเปิดอยู่ ต้องดูต่างจากลิงก์อื่นโดยไม่ต้องอ่าน */
 .adminnav a.on { background: var(--green-wash); color: var(--green); }
-/* ออกจากระบบไปอยู่ขวาสุดเสมอ — ปุ่มที่กดแล้วย้อนกลับยาก ไม่ควรอยู่ติดปุ่มที่กดบ่อย */
-.adminnav a.out { margin-left: auto; color: var(--ink-3); font-weight: 500; }
+
+/*
+ * มือถือ: ย้ายแท็บลงล่าง ให้นิ้วโป้งถึงโดยไม่ต้องเลื่อนกลับขึ้นบนสุด
+ * แลกกับพื้นที่จอที่หายไปถาวร และต้องเว้นท้ายหน้าไม่ให้เนื้อหาถูกทับ
+ */
+@media (max-width: 899px) {
+  .adminnav {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    gap: 2px; padding: 6px 8px;
+    /* กันไม่ให้ชนแถบ home ของ iPhone */
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface); border-top: 1px solid var(--line);
+    box-shadow: 0 -4px 14px rgba(17, 40, 34, .06);
+  }
+  .adminnav a { font-size: 12.5px; padding: 9px 4px; }
+  /* เว้นที่ให้แถบล่าง ไม่งั้นบรรทัดสุดท้ายของทุกหน้าจะอ่านไม่เห็น */
+  .admin.wrap { padding-bottom: 104px; }
+}
+
+@media (min-width: 899.1px) {
+  .adminnav { border-bottom: 1px solid var(--line); padding: 10px 0 8px; margin-bottom: 4px; }
+}
+
+/* ทางออกอยู่มุมขวาบน ไกลจากแท็บที่กดทุกวัน และจางกว่าป้าย admin */
+.hero-bar .signout {
+  display: flex; align-items: center; justify-content: center; flex: none;
+  width: 34px; height: 34px; margin-left: 2px;
+  color: var(--ink-3); border-radius: 10px; text-decoration: none;
+}
+.hero-bar .signout:hover { background: var(--surface); color: var(--warn); }
 
 .admin .pill.go {
   background: var(--green-wash); color: var(--green); text-decoration: none;
