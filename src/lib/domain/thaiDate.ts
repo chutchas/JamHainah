@@ -194,3 +194,22 @@ export function parseThaiDateText(text: string, today: ISODate): ISODate | null 
 
   return null;
 }
+
+/**
+ * "วันนี้" · "เมื่อวาน" · "3 วันที่แล้ว" · "15 ก.ย. 2569"
+ *
+ * คนที่เปิดห้องทำงานอ่านเพื่อตอบคำถามเดียว: เรื่องนี้เพิ่งเกิดหรือนานแล้ว
+ * วันที่เต็มบังคับให้เขาคำนวณในหัวทุกครั้ง ส่วน "3 วันที่แล้ว" ตอบให้เลย
+ *
+ * เกิน 14 วันกลับไปใช้วันที่เต็ม เพราะ "43 วันที่แล้ว" ก็ต้องคำนวณในหัวอยู่ดี
+ * และของเก่าขนาดนั้นมักต้องการวันที่จริงเพื่อไปเทียบกับอย่างอื่น
+ */
+export function ago(iso: ISODate, today: ISODate = todayInBangkok()): string {
+  const n = daysBetween(today, iso);   // ติดลบ = อดีต
+  if (n === 0) return 'วันนี้';
+  if (n === -1) return 'เมื่อวาน';
+  if (n === 1) return 'พรุ่งนี้';
+  if (n < 0 && n >= -14) return `${-n} วันที่แล้ว`;
+  if (n > 0 && n <= 14) return `อีก ${n} วัน`;
+  return formatThai(iso);
+}

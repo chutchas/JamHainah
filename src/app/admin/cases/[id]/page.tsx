@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useState } from 'react';
-import { Shell, Gate, useAdmin } from '../../Shell';
+import { Shell, Gate, useAdmin, UserId } from '../../Shell';
 import { STATUS_TH, VEHICLE_FIELDS } from '@/lib/domain/caseWork';
 
 interface EventRow {
@@ -38,7 +38,7 @@ function say(e: EventRow): string {
 
 export default function CasePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { state, message, data, busy, act } = useAdmin<CaseDetail>(`/api/admin/cases/${id}`);
+  const { state, message, data, busy, flash, act, reload } = useAdmin<CaseDetail>(`/api/admin/cases/${id}`);
   const [note, setNote] = useState('');
   const [price, setPrice] = useState('');
   const [car, setCar] = useState<Record<string, string> | null>(null);
@@ -48,7 +48,7 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
   const vehicle = car ?? data.vehicle ?? {};
 
   return (
-    <Shell role={data.me.role}>
+    <Shell role={data.me.role} onRefresh={reload} busy={busy} flash={flash}>
       <p className="note left"><a href="/admin/cases">← กลับไปรายการเคส</a></p>
 
       <h2>{data.name ?? 'ผู้ใช้'} · {data.serviceLabel}</h2>
@@ -63,7 +63,7 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
           เปิดเคส {data.atThai}
           {data.document && ` · จาก${data.document.label} หมด ${data.document.expiryThai}`}
         </div>
-        <code>{data.lineUserId}</code>
+        <UserId id={data.lineUserId} />
         {data.canEdit && (
           <div className="acts">
             {(NEXT[data.status] ?? []).map((next) => (

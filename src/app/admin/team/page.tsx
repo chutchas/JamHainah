@@ -1,28 +1,49 @@
 'use client';
 
-import { useState } from 'react';
-import { Shell, Gate, useAdmin } from '../Shell';
+import { useEffect, useState } from 'react';
+import { Shell, Gate, useAdmin, UserId } from '../Shell';
 import type { Summary } from '../types';
 import { ADMIN_ROLES, ROLE_TH, ROLE_WHAT, type AdminRole } from '@/lib/domain/roles';
+
+interface AuditEntry {
+  id: number; on: string; atThai: string; time: string;
+  byName: string; what: string; target: string | null; orderId: string | null;
+}
 
 /**
  * ทีม — หน้าเดียวในห้องทำงานที่แตะสิทธิ์ของคนอื่น
  *
  * แยกออกมาจากหน้าสรุปโดยตั้งใจ: งานนี้ทำนาน ๆ ครั้ง แต่ผิดแล้วเจ็บ
  * การให้มันนั่งอยู่ท้ายหน้าที่เปิดดูทุกวัน คือการเชิญให้เผลอกด
+ *
+ * ประวัติการแก้ไขอยู่ท้ายหน้านี้ ไม่แยกเป็นแท็บใหม่ เพราะคนที่เปิดมาดูประวัติ
+ * คือคนเดียวกับที่มาดูว่าตอนนี้ใครมีสิทธิ์อะไร — คำถามเดียวกันคนละมุม
  */
 export default function Team() {
-  const { state, message, data, busy, act } = useAdmin<Summary>('/api/admin/summary');
+  const { state, message, data, busy, flash, act, reload } = useAdmin<Summary>('/api/admin/summary');
   const [newId, setNewId] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState<AdminRole>('staff');
+  const [log, setLog] = useState<AuditEntry[] | null>(null);
+
+  const owner = data?.me.role === 'owner';
+
+  useEffect(() => {
+    if (!owner) return;
+    let off = false;
+    fetch('/api/admin/audit')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!off && j) setLog(j.entries ?? []); })
+      .catch(() => {});
+    return () => { off = true; };
+    // โหลดใหม่ทุกครั้งที่ตารางทีมเปลี่ยน เพราะการเปลี่ยนนั้นเองก็เป็นบรรทัดใหม่ในประวัติ
+  }, [owner, data]);
 
   if (state !== 'ready' || !data) return <Gate state={state} message={message} />;
   const { team, me } = data;
-  const owner = me.role === 'owner';
 
   return (
-    <Shell role={data.me.role}>
+    <Shell role={me.role} onRefresh={reload} busy={busy} flash={flash}>
       <h2>ทีม ({team.filter((m) => !m.disabled).length} คนที่ใช้งานได้)</h2>
       {message && <p className="warn">{message}</p>}
 
@@ -49,17 +70,16 @@ export default function Team() {
                   {m.disabled ? 'ถูกถอดสิทธิ์' : ROLE_TH[m.role as AdminRole] ?? m.role}
                 </span>
               </div>
-              {!m.disabled && (
-                <div className="muted">{ROLE_WHAT[m.role as AdminRole]}</div>
-              )}
-              <code>{m.lineUserId}</code>
+              {!m.disabled && <div className="muted">{ROLE_WHAT[m.role as AdminRole]}</div>}
+              <UserId id={m.lineUserId} />
 
               {owner && !m.disabled && !self && (
                 <div className="acts">
                   <select
                     value={m.role} disabled={busy}
                     onChange={(e) =>
-                      act('/api/admin/team', { lineUserId: m.lineUserId, role: e.target.value })
+                      act('/api/admin/team', { lineUserId: m.lineUserId, role: e.target.value },
+                        `เปลี่ยนเป็น${ROLE_TH[e.target.value as AdminRole]}แล้ว`)
                     }
                   >
                     {ADMIN_ROLES.map((r) => (
@@ -68,7 +88,8 @@ export default function Team() {
                   </select>
                   <button
                     className="btn danger" disabled={busy}
-                    onClick={() => act('/api/admin/team', { lineUserId: m.lineUserId, disable: true })}
+                    onClick={() => act('/api/admin/team',
+                      { lineUserId: m.lineUserId, disable: true }, 'ถอดสิทธิ์แล้ว')}
                   >
                     ถอดสิทธิ์
                   </button>
@@ -105,7 +126,7 @@ export default function Team() {
               onClick={() =>
                 act('/api/admin/team', {
                   lineUserId: newId.trim(), role, displayName: name.trim() || undefined,
-                }).then(() => { setNewId(''); setName(''); })
+                }, 'เพิ่มเข้าทีมแล้ว').then(() => { setNewId(''); setName(''); })
               }
             >
               เพิ่มเข้าทีม
@@ -114,8 +135,31 @@ export default function Team() {
           </div>
           <p className="note left">
             หารหัสได้จากตาราง users ใน Supabase — ให้เขาทักบอทก่อนหนึ่งครั้ง แล้วรหัสจะไปโผล่ที่นั่น
-            <br />
-            ทุกการเพิ่ม ถอด และเปลี่ยนระดับ ถูกบันทึกว่าใครทำและทำเมื่อไหร่
+          </p>
+
+          <h2>ประวัติการแก้ไข</h2>
+          {log === null && <p className="muted">กำลังโหลด…</p>}
+          {log?.length === 0 && <p className="muted">ยังไม่มีใครแก้อะไรเลย</p>}
+          {log && log.length > 0 && (
+            <div className="timeline">
+              {log.map((e) => (
+                <div className="tl" key={e.id}>
+                  <span className="tl-when">{e.atThai} {e.time}</span>
+                  <span className="tl-what">
+                    {e.what}
+                    {e.target && (
+                      e.orderId
+                        ? <> · <a href={`/admin/cases/${e.orderId}`}>{e.target}</a></>
+                        : ` · ${e.target}`
+                    )}
+                  </span>
+                  <span className="tl-who">{e.byName}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="note left">
+            60 รายการล่าสุด — ประวัติทั้งหมดอยู่ในตาราง audit_log และลบจากหน้านี้ไม่ได้
           </p>
         </>
       )}

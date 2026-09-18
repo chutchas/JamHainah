@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Shell, Gate, useAdmin } from '../Shell';
+import { Shell, Gate, useAdmin, UserId } from '../Shell';
 import type { StuckPerson } from '../types';
 
 interface Payload { today: string; people: StuckPerson[]; me: { role: string } }
@@ -18,9 +18,8 @@ interface Payload { today: string; people: StuckPerson[]; me: { role: string } }
  * สองข้อความต่อวัน ยิงทีละใบจะทำให้คนที่ค้างสามใบได้สามข้อความ และจ่ายสามเท่า
  */
 export default function Reminders() {
-  const { state, message, data, busy, act } = useAdmin<Payload>('/api/admin/reminders');
+  const { state, message, data, busy, flash, act, reload } = useAdmin<Payload>('/api/admin/reminders');
   const [asking, setAsking] = useState<StuckPerson | null>(null);
-  const [note, setNote] = useState('');
 
   if (state !== 'ready' || !data) return <Gate state={state} message={message} />;
   const { people } = data;
@@ -28,15 +27,14 @@ export default function Reminders() {
 
   async function fire(p: StuckPerson) {
     setAsking(null);
-    const out = await act('/api/admin/reminders', { lineUserId: p.lineUserId });
-    if (out) setNote((out.note as string) ?? `ยิงซ้ำให้ ${p.name ?? 'ผู้ใช้'} แล้ว`);
+    await act('/api/admin/reminders', { lineUserId: p.lineUserId },
+      `ยิงซ้ำให้ ${p.name ?? 'ผู้ใช้'} แล้ว`);
   }
 
   return (
-    <Shell role={data.me.role}>
+    <Shell role={data.me.role} onRefresh={reload} busy={busy} flash={flash}>
       <h2>รายการค้าง ({totalItems} รายการ · {people.length} คน)</h2>
       {message && <p className="warn">{message}</p>}
-      {note && <p className="note left ok">{note}</p>}
 
       {people.length === 0 ? (
         <p className="muted">ไม่มีรายการค้างครับ — รอบเตือนเดินครบทุกคน</p>
@@ -92,7 +90,7 @@ export default function Reminders() {
                     </button>
                   )}
                 </div>
-                <code>{p.lineUserId}</code>
+                <UserId id={p.lineUserId} />
               </div>
             );
           })}

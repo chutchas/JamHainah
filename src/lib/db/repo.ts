@@ -474,6 +474,28 @@ export async function audit(args: {
   }
 }
 
+export interface AuditRow {
+  id: number;
+  actor: string;
+  action: string;
+  entity: string | null;
+  before: unknown;
+  after: unknown;
+  at: string;
+}
+
+/**
+ * ประวัติว่าใครแตะอะไร — อ่านจากหน้าเว็บได้ ไม่ต้องเปิด Supabase
+ *
+ * คำสัญญาว่า "ทุกการเปลี่ยนแปลงถูกบันทึกไว้" ที่ตรวจสอบไม่ได้จากที่ที่มันเขียนไว้
+ * ก็ไม่ต่างจากไม่มี — และตอนที่อยากดูจริง ๆ มักเป็นตอนที่ไม่มีเวลาไปงมในฐานข้อมูล
+ */
+export async function listAudit(limit = 60): Promise<AuditRow[]> {
+  const { data } = await db()
+    .from('audit_log').select('*').order('at', { ascending: false }).limit(limit);
+  return (data as AuditRow[]) ?? [];
+}
+
 /* ---------------- คิวงาน ---------------- */
 
 export interface OrderRow {

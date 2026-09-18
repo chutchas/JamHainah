@@ -485,3 +485,45 @@ html, body {
   .admin .fields { grid-template-columns: 1fr 1fr; gap: 12px 16px; }
   .admin .addrow { grid-template-columns: 1fr 1fr auto auto; }
 }
+
+/* ---- บอกว่าบันทึกแล้ว · รหัสย่อ · กรองและค้นหา ---- */
+/*
+ * แถบเขียวสั้น ๆ ใต้เมนู — อยู่ที่เดิมเสมอ ไม่ว่าจะกดปุ่มไหนในหน้า
+ * ข้อความที่โผล่ตรงที่กด จะถูกมองข้ามเวลาคนกำลังมองปลายนิ้วตัวเอง
+ */
+.admin .flash {
+  background: var(--green-wash); color: var(--green);
+  font-size: 13px; font-weight: 600;
+  border-radius: 10px; padding: 9px 12px; margin: 8px 0 2px;
+}
+
+/* รหัส LINE ที่ย่อแล้ว — ดูเป็นของกดได้ แต่ไม่แย่งสายตาจากชื่อคน */
+.admin .uid {
+  display: inline-block; margin-top: 4px; padding: 3px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+  color: var(--ink-3); background: var(--ground);
+  border: 1px solid var(--line); border-radius: 8px; cursor: pointer;
+}
+.admin .uid:hover { color: var(--green); border-color: var(--green); }
+
+.admin .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 8px; }
+.admin .chip {
+  font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer;
+  padding: 7px 13px; border-radius: 999px; line-height: 1;
+  background: var(--surface); color: var(--ink-2); border: 1px solid var(--line);
+}
+.admin .chip:hover { border-color: var(--green); }
+.admin .chip.on { background: var(--green); border-color: var(--green); color: #fff; }
+
+.admin .search {
+  width: 100%; padding: 11px 13px; font-size: 14px; font-family: inherit;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); color: var(--ink); margin-bottom: 4px;
+}
+
+/* ตัวเลขที่กดแล้วพาไปทำต่อได้ ต้องดูกดได้ */
+.admin a.tile { text-decoration: none; }
+.admin a.tile:hover { border-color: var(--green); }
+
+/* ป้ายเตือนที่ลอยอยู่ในการ์ด ไม่ได้อยู่ในแถว */
+.admin .lead > .tagx { display: inline-block; margin-top: 8px; }

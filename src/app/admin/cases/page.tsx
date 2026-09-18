@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { Shell, Gate, useAdmin } from '../Shell';
+import { useMemo, useState } from 'react';
+import { Shell, Gate, useAdmin, UserId } from '../Shell';
 import { STATUS_TH } from '@/lib/domain/caseWork';
+import { ago } from '@/lib/domain/thaiDate';
 
 interface CaseRow {
   id: string; status: string; service: string; serviceLabel: string;
-  name: string | null; lineUserId: string; atThai: string;
+  name: string | null; lineUserId: string; openedOn: string; atThai: string;
+  idleDays: number; assigneeName: string | null;
   note: string | null; priceThb: number | null; paid: boolean;
 }
 interface Payload {
@@ -19,26 +21,55 @@ interface Payload {
 const OPEN = ['new', 'accepted', 'in_progress'];
 
 /**
- * เคส "ให้เราต่อให้" — ที่เดียวที่งานของลูกค้าถูกจดไว้
- *
- * ก่อนหน้านี้เคสเกิดได้ทางเดียวคือลูกค้ากดปุ่มในไลน์ แต่ลูกค้าจริงโทรมา
- * ทักมา หรือเจอกันหน้าร้าน — งานที่จดไม่ได้ คืองานที่หายไปเงียบ ๆ
+ * ตัวกรองที่คนใช้จริงเลือกก่อนเสมอ คือ "อะไรยังไม่จบ"
+ * จึงเป็นค่าเริ่มต้น ไม่ใช่ "ทั้งหมด" ที่ต้องมานั่งกรองเองทุกครั้งที่เปิดหน้า
  */
+const FILTERS = [
+  { key: 'open', label: 'ยังไม่จบ' },
+  { key: 'new', label: 'ใหม่' },
+  { key: 'in_progress', label: 'กำลังทำ' },
+  { key: 'done', label: 'เสร็จ' },
+  { key: 'cancelled', label: 'ยกเลิก' },
+  { key: 'all', label: 'ทั้งหมด' },
+];
+
+/** ไม่มีใครแตะเกินหนึ่งสัปดาห์ = เคสที่กำลังจะถูกลืม */
+const IDLE_WARN = 7;
+
 export default function Cases() {
-  const { state, message, data, busy, act, post } = useAdmin<Payload>('/api/admin/cases');
+  const { state, message, data, busy, flash, act, post, reload } =
+    useAdmin<Payload>('/api/admin/cases');
   const [opening, setOpening] = useState(false);
   const [q, setQ] = useState('');
   const [found, setFound] = useState<Array<{ line_user_id: string; display_name: string | null }> | null>(null);
   const [picked, setPicked] = useState<{ id: string; name: string | null } | null>(null);
   const [service, setService] = useState('cmi');
   const [note, setNote] = useState('');
-  const [showDone, setShowDone] = useState(false);
+  const [filter, setFilter] = useState('open');
+  const [term, setTerm] = useState('');
+
+  const all = data?.cases ?? [];
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: all.length, open: 0 };
+    for (const x of all) {
+      c[x.status] = (c[x.status] ?? 0) + 1;
+      if (OPEN.includes(x.status)) c.open++;
+    }
+    return c;
+  }, [all]);
+
+  const shown = useMemo(() => {
+    const t = term.trim().toLowerCase();
+    return all
+      .filter((c) => (filter === 'all' ? true : filter === 'open' ? OPEN.includes(c.status) : c.status === filter))
+      // ค้นจากสิ่งที่คนจำได้จริง: ชื่อลูกค้า เรื่องที่ทำ และโน้ตที่ตัวเองพิมพ์ไว้
+      .filter((c) => !t || [c.name, c.serviceLabel, c.note, c.assigneeName]
+        .some((v) => v?.toLowerCase().includes(t)))
+      // เคสที่ไม่มีใครแตะนานสุดอยู่บนสุด — บนสุดควรเป็นของที่กำลังจะหลุด
+      .sort((a, b) => b.idleDays - a.idleDays);
+  }, [all, filter, term]);
 
   if (state !== 'ready' || !data) return <Gate state={state} message={message} />;
-
-  const open = data.cases.filter((c) => OPEN.includes(c.status));
-  const closed = data.cases.filter((c) => !OPEN.includes(c.status));
-  const shown = showDone ? closed : open;
 
   async function search() {
     const out = await post('/api/admin/cases', { find: q });
@@ -49,21 +80,18 @@ export default function Cases() {
     if (!picked) return;
     const out = await act('/api/admin/cases', {
       lineUserId: picked.id, service, note: note.trim() || undefined,
-    });
+    }, 'เปิดเคสแล้ว');
     if (out?.id) window.location.href = `/admin/cases/${out.id}`;
   }
 
   return (
-    <Shell role={data.me.role}>
-      <h2>เคส ({open.length} ชิ้นที่ยังไม่จบ)</h2>
+    <Shell role={data.me.role} onRefresh={reload} busy={busy} flash={flash}>
+      <h2>เคส ({counts.open} ชิ้นที่ยังไม่จบ)</h2>
       {message && <p className="warn">{message}</p>}
 
       <div className="acts">
         <button className="btn primary" onClick={() => setOpening(!opening)}>
           {opening ? 'ปิดฟอร์ม' : 'เปิดเคสใหม่'}
-        </button>
-        <button className="btn" onClick={() => setShowDone(!showDone)}>
-          {showDone ? `ดูที่ยังไม่จบ (${open.length})` : `ดูที่ปิดแล้ว (${closed.length})`}
         </button>
       </div>
 
@@ -93,7 +121,7 @@ export default function Cases() {
                   onClick={() => setPicked({ id: u.line_user_id, name: u.display_name })}
                 >
                   <b>{u.display_name ?? 'ไม่มีชื่อ'}</b>
-                  <code>{u.line_user_id}</code>
+                  <UserId id={u.line_user_id} />
                 </button>
               ))}
             </div>
@@ -119,8 +147,27 @@ export default function Cases() {
         </div>
       )}
 
+      {/* กรองกับค้นหาอยู่ติดกัน เพราะเป็นการหาของเหมือนกัน คนละวิธีเท่านั้น */}
+      <div className="chips">
+        {FILTERS.map((f) => (
+          <button
+            key={f.key}
+            className={`chip ${filter === f.key ? 'on' : ''}`}
+            onClick={() => setFilter(f.key)}
+          >
+            {f.label} {counts[f.key] ?? 0}
+          </button>
+        ))}
+      </div>
+      <input
+        className="search" value={term} onChange={(e) => setTerm(e.target.value)}
+        placeholder="ค้นในรายการ — ชื่อลูกค้า เรื่องที่ทำ โน้ต หรือคนรับผิดชอบ"
+      />
+
       {shown.length === 0 ? (
-        <p className="muted">{showDone ? 'ยังไม่มีเคสที่ปิดแล้ว' : 'ไม่มีเคสค้างครับ'}</p>
+        <p className="muted">
+          {term.trim() ? 'ไม่เจอเคสที่ตรงกับคำนี้' : 'ไม่มีเคสในกลุ่มนี้ครับ'}
+        </p>
       ) : (
         <div className="rows">
           {shown.map((c) => (
@@ -130,11 +177,15 @@ export default function Cases() {
                 <span className={`pill ${c.status}`}>{STATUS_TH[c.status] ?? c.status}</span>
               </div>
               <div className="muted">
-                {c.serviceLabel} · เปิดเคส {c.atThai}
+                {c.serviceLabel} · เปิดเคส {ago(c.openedOn)}
+                {c.assigneeName ? ` · ${c.assigneeName}` : ' · ยังไม่มีคนรับ'}
                 {data.seesMoney && c.priceThb != null && ` · ${c.priceThb} บาท`}
                 {c.paid && ' · รับเงินแล้ว'}
               </div>
               {c.note && <div className="muted">{c.note}</div>}
+              {OPEN.includes(c.status) && c.idleDays >= IDLE_WARN && (
+                <span className="tagx warn">ไม่มีใครแตะมา {c.idleDays} วัน</span>
+              )}
             </a>
           ))}
         </div>

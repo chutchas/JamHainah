@@ -34,7 +34,13 @@ const NAV = [
  * ยังไม่รู้ระดับ (หน้ากำลังโหลด หรือยังไม่ผ่านด่าน) = ไม่ต้องขึ้นป้าย
  * ป้ายที่เดาไว้ก่อนแล้วเปลี่ยนทีหลัง แย่กว่าป้ายที่ยังไม่มา
  */
-export function Shell({ children, role }: { children: React.ReactNode; role?: string }) {
+export function Shell({ children, role, onRefresh, busy, flash }: {
+  children: React.ReactNode;
+  role?: string;
+  onRefresh?: () => void;
+  busy?: boolean;
+  flash?: string;
+}) {
   const here = usePathname();
   const roleLabel = role ? ROLE_TH[role as AdminRole] : null;
   return (
@@ -48,6 +54,22 @@ export function Shell({ children, role }: { children: React.ReactNode; role?: st
           <img className="logo" src="/brand/logo.png" alt="" width={44} height={44} />
           <h1>ห้องทำงาน</h1>
           {roleLabel && <span className="tag">{roleLabel}</span>}
+          {/*
+            รีเฟรชด้วยมือ ไม่ใช่ดึงข้อมูลใหม่เองทุก 30 วิ
+            หน้าที่ขยับเองตอนคนกำลังอ่าน คือหน้าที่ทำให้กดผิดแถว
+          */}
+          {onRefresh && (
+            <button
+              className="signout" type="button" onClick={onRefresh} disabled={busy}
+              title="โหลดข้อมูลใหม่" aria-label="โหลดข้อมูลใหม่"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+            </button>
+          )}
           {/*
             ออกจากระบบเป็นไอคอน อยู่ไกลจากแท็บที่กดทุกวัน
             กดพลาดแล้วแค่ล็อกอินใหม่ ไม่มีอะไรหาย จึงยอมแลกกับพื้นที่ที่ได้คืน
@@ -75,6 +97,9 @@ export function Shell({ children, role }: { children: React.ReactNode; role?: st
           </a>
         ))}
       </nav>
+
+      {/* บอกว่าบันทึกแล้ว — ปุ่มที่กดแล้วเงียบ ทำให้คนกดซ้ำเพราะไม่แน่ใจ */}
+      {flash && <p className="flash">{flash}</p>}
 
       {children}
     </div>
@@ -107,6 +132,7 @@ export function useAdmin<T>(url: string) {
   const [message, setMessage] = useState('');
   const [data, setData] = useState<T | null>(null);
   const [busy, setBusy] = useState(false);
+  const [flash, setFlash] = useState('');
 
   const load = useCallback(async (first = false) => {
     const params = new URLSearchParams(window.location.search);
@@ -169,14 +195,19 @@ export function useAdmin<T>(url: string) {
   }, []);
 
   const act = useCallback(async (
-    target: string, body: unknown,
+    target: string, body: unknown, say = 'บันทึกแล้ว',
   ): Promise<Record<string, any> | null> => {
     const out = await post(target, body);
-    if (out) await load();
+    if (out) {
+      await load();
+      setFlash((out.note as string) || say);
+      // หายเองใน 3 วิ — ข้อความที่ค้างอยู่ จะถูกอ่านว่าเป็นผลของการกดครั้งถัดไป
+      window.setTimeout(() => setFlash(''), 3000);
+    }
     return out;
   }, [post, load]);
 
-  return { state, message, setMessage, data, busy, act, post, reload: load };
+  return { state, message, setMessage, data, busy, flash, act, post, reload: load };
 }
 
 /** หน้าจอระหว่างยังไม่มีข้อมูลให้แสดง — เขียนที่เดียวให้ทุกหน้าเหมือนกัน */
@@ -195,5 +226,32 @@ export function Gate({ state, message }: { state: State; message: string }) {
       <p className="warn">{message}</p>
       <p className="acts"><a className="pill" href="/api/admin/logout">ออกจากระบบ</a></p>
     </Shell>
+  );
+}
+
+/**
+ * รหัส LINE ของลูกค้า — ยาว 33 ตัวและไม่มีใครอ่านออก
+ *
+ * แต่ลบทิ้งไม่ได้ เพราะเป็นตัวเดียวที่เอาไปค้นใน Supabase ได้ตอนมีเรื่อง
+ * จึงย่อให้พ้นทาง แล้วกดทีเดียวได้ทั้งก้อนตอนที่ต้องใช้จริง
+ */
+export function UserId({ id }: { id: string | null }) {
+  const [copied, setCopied] = useState(false);
+  if (!id) return null;
+  const short = `${id.slice(0, 5)}…${id.slice(-4)}`;
+  return (
+    <button
+      type="button" className="uid" title={`คัดลอก ${id}`}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        navigator.clipboard?.writeText(id).then(
+          () => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); },
+          () => {},
+        );
+      }}
+    >
+      {copied ? 'คัดลอกแล้ว' : short}
+    </button>
   );
 }

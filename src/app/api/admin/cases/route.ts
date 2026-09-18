@@ -9,7 +9,7 @@ import { requireAdmin, denied, can } from '@/lib/admin/auth';
 import * as repo from '@/lib/db/repo';
 import { db } from '@/lib/db/client';
 import { docType } from '@/lib/domain/docTypes';
-import { formatThai } from '@/lib/domain/thaiDate';
+import { formatThai, todayInBangkok, daysBetween } from '@/lib/domain/thaiDate';
 import { SERVICES, SERVICE_TH } from '@/lib/domain/caseWork';
 
 export const runtime = 'nodejs';
@@ -23,10 +23,17 @@ export async function GET(req: NextRequest) {
 
   const rows = await repo.listOrders(200);
   const ids = [...new Set(rows.map((r) => r.line_user_id))];
-  const { data: people } = ids.length
-    ? await db().from('users').select('line_user_id, display_name').in('line_user_id', ids)
-    : { data: [] as Array<{ line_user_id: string; display_name: string | null }> };
+  const [{ data: people }, admins] = await Promise.all([
+    ids.length
+      ? db().from('users').select('line_user_id, display_name').in('line_user_id', ids)
+      : Promise.resolve({ data: [] as Array<{ line_user_id: string; display_name: string | null }> }),
+    repo.listAdmins(),
+  ]);
   const nameBy = new Map((people ?? []).map((p) => [p.line_user_id, p.display_name]));
+  const staffBy = new Map(admins.map((a) => [a.line_user_id, a.display_name]));
+
+  const today = todayInBangkok();
+  const daysSince = (iso: string) => Math.max(0, daysBetween(iso.slice(0, 10), today));
 
   return NextResponse.json({
     services: SERVICES.map((s) => ({ key: s, label: SERVICE_TH[s] })),
@@ -39,7 +46,15 @@ export async function GET(req: NextRequest) {
       serviceLabel: SERVICE_TH[o.service] ?? docType(o.service).label,
       name: nameBy.get(o.line_user_id) ?? null,
       lineUserId: o.line_user_id,
+      openedOn: o.created_at.slice(0, 10),
       atThai: formatThai(o.created_at.slice(0, 10)),
+      /**
+       * "ไม่ขยับมากี่วัน" ไม่ใช่ "เปิดมากี่วัน"
+       * เคสที่เปิดมา 20 วันแต่เพิ่งคุยกับลูกค้าเมื่อวาน ไม่ใช่เคสที่ถูกลืม
+       * ส่วนเคสที่เปิดมา 3 วันแล้วไม่มีใครแตะเลย คือเคสที่กำลังจะหลุด
+       */
+      idleDays: daysSince(o.updated_at),
+      assigneeName: o.assignee ? (staffBy.get(o.assignee) ?? 'ผู้ดูแล') : null,
       note: o.note,
       priceThb: seesMoney ? o.price_thb : null,
       paid: o.paid_at !== null,
