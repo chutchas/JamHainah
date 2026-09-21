@@ -496,6 +496,44 @@ export async function listAudit(limit = 60): Promise<AuditRow[]> {
   return (data as AuditRow[]) ?? [];
 }
 
+/* ---------------- ปุ่มต่ออายุ ---------------- */
+
+export interface RenewActionRow {
+  id: string;
+  doc_type: string;
+  kind: 'upsell' | 'link' | 'location';
+  label: string;
+  url: string | null;
+  search_term: string | null;
+  sort_order: number;
+  enabled: boolean;
+  verified_at: string | null;
+  note: string | null;
+  updated_at: string;
+}
+
+/** ทุกแถว รวมที่ปิดไว้ — ห้องทำงานต้องเห็นของที่ปิดด้วย ไม่งั้นเปิดกลับไม่ได้ */
+export async function listRenewActions(): Promise<RenewActionRow[]> {
+  const { data } = await db()
+    .from('renew_actions').select('*').order('doc_type').order('sort_order');
+  return (data as RenewActionRow[]) ?? [];
+}
+
+export async function getRenewAction(id: string): Promise<RenewActionRow | null> {
+  const { data } = await db().from('renew_actions').select('*').eq('id', id).maybeSingle();
+  return (data as RenewActionRow) ?? null;
+}
+
+export async function updateRenewAction(
+  id: string,
+  patch: Partial<Pick<RenewActionRow, 'label' | 'url' | 'search_term' | 'enabled' | 'verified_at' | 'note'>>,
+): Promise<RenewActionRow> {
+  const { data, error } = await db()
+    .from('renew_actions').update(patch).eq('id', id).select().single();
+  if (error) throw new Error(`updateRenewAction: ${error.message}`);
+  return data as RenewActionRow;
+}
+
 /* ---------------- คิวงาน ---------------- */
 
 export interface OrderRow {

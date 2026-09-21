@@ -21,6 +21,7 @@ const NAV = [
   { href: '/admin', label: 'สรุป' },
   { href: '/admin/cases', label: 'เคส' },
   { href: '/admin/reminders', label: 'รายการค้าง' },
+  { href: '/admin/links', label: 'ลิงก์' },
   { href: '/admin/team', label: 'ทีม' },
 ];
 

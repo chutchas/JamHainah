@@ -37,12 +37,14 @@ export interface AdminIdentity {
  *   money    เห็นราคา ค่าข้อความ และยอดเงิน
  *   retry    ยิงเตือนซ้ำ (เสียเงินจริงทุกครั้งที่กด)
  *   queue    รับงาน เปลี่ยนสถานะ จดโน้ต
+ *   content  แก้ปุ่มและลิงก์ในข้อความเตือน (แก้ปุ๊บ ลูกค้าทุกคนเห็นทันที)
  */
 export const CAN = {
-  team:  ['owner'],
-  money: ['owner', 'manager'],
-  retry: ['owner', 'manager'],
-  queue: ['owner', 'manager', 'staff'],
+  team:    ['owner'],
+  money:   ['owner', 'manager'],
+  retry:   ['owner', 'manager'],
+  content: ['owner', 'manager'],
+  queue:   ['owner', 'manager', 'staff'],
 } as const satisfies Record<string, readonly repo.AdminRole[]>;
 
 export type Permission = keyof typeof CAN;

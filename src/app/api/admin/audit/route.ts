@@ -25,6 +25,10 @@ const SAY: Record<string, string> = {
   'reminder.retry': 'ยิงเตือนซ้ำ',
   'reminder.retry.failed': 'ยิงเตือนซ้ำแล้วไม่ออก',
   'reminder.retry.skipped': 'ปิดรายการเตือนที่ไม่ต้องส่งแล้ว',
+  'link.verify': 'ตรวจลิงก์ผ่าน',
+  'link.edit': 'แก้ปุ่มต่ออายุ',
+  'link.enable': 'เปิดปุ่มต่ออายุ',
+  'link.disable': 'ปิดปุ่มต่ออายุ',
 };
 
 export async function GET(req: NextRequest) {
@@ -56,7 +60,9 @@ export async function GET(req: NextRequest) {
           ? `เคส ${r.entity.slice(7, 15)}`
           : r.entity.startsWith('admins:')
             ? (nameBy.get(r.entity.slice(7)) ?? 'คนในทีม')
-            : r.entity
+            : r.entity.startsWith('renew_actions:')
+              ? String((r.after as { label?: string } | null)?.label ?? 'ปุ่มต่ออายุ')
+              : r.entity
         : null,
       orderId: r.entity?.startsWith('orders:') ? r.entity.slice(7) : null,
     })),

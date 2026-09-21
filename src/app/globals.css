@@ -527,3 +527,12 @@ html, body {
 
 /* ป้ายเตือนที่ลอยอยู่ในการ์ด ไม่ได้อยู่ในแถว */
 .admin .lead > .tagx { display: inline-block; margin-top: 8px; }
+
+/* ---- ปุ่มต่ออายุ ---- */
+/* ปุ่มที่ปิดอยู่ยังต้องเห็น — ไม่งั้นเปิดกลับไม่ได้ แต่ต้องดูออกว่าลูกค้าไม่เห็นมัน */
+.admin .offcard { opacity: .6; border-style: dashed; }
+.admin .linkline { display: block; word-break: break-all; text-decoration: none; }
+.admin .linkline:hover { color: var(--green); }
+.admin .tagx.ok { background: var(--green-wash); color: var(--green); }
+.admin .lead .stuckrow { border-top: 0; padding: 6px 0 0; }
+.admin .lead .stuckrow:empty { display: none; }
