@@ -15,11 +15,32 @@ const LIST = 'src/app/api/admin/customers/route.ts';
 const ONE = 'src/app/api/admin/customers/[id]/route.ts';
 
 test('หน้าลูกค้าดูได้อย่างเดียว — ไม่มีทางแก้เอกสารแทนลูกค้า', () => {
+  const one = read(ONE);
+  assert.ok(!/export async function (POST|PUT|PATCH|DELETE)/.test(one), 'หน้ารายคนมีทางเขียนข้อมูล');
   for (const f of [LIST, ONE]) {
-    const s = read(f);
-    assert.ok(!/export async function (POST|PUT|PATCH|DELETE)/.test(s), `${f} มีทางเขียนข้อมูล`);
-    assert.ok(!/\.(update|insert|upsert|delete)\(/.test(s), `${f} แก้ข้อมูลในฐานได้`);
+    assert.ok(!/\.(update|insert|upsert|delete)\(/.test(read(f)), `${f} แก้ข้อมูลในฐานตรง ๆ ได้`);
   }
+  // POST ของรายชื่อทำได้อย่างเดียว คือเติมชื่อที่ LINE ให้มา
+  const list = read(LIST);
+  assert.ok(!/export async function (PUT|PATCH|DELETE)/.test(list));
+  assert.ok(!list.includes("from('documents').update") && !list.includes('updateDocument'));
+  assert.match(list, /body\.op !== 'fillNames'/);
+});
+
+test('ดึงชื่อจาก LINE: เฉพาะเจ้าของ/หัวหน้า ลงประวัติ และมีเพดานต่อครั้ง', () => {
+  const list = read(LIST);
+  const post = list.slice(list.indexOf('export async function POST'));
+  assert.match(post, /if \(!can\(who, 'people'\)\)/);
+  assert.match(post, /repo\.audit\(/);
+  assert.match(post, /\.limit\(FILL_MAX\)/);
+  assert.match(post, /\.is\('unfollowed_at', null\)/, 'ไม่ต้องถามชื่อคนที่บล็อกแล้ว');
+});
+
+test('ดึงโปรไฟล์ไม่สำเร็จต้องทิ้งร่องรอยใน log', () => {
+  const c = read('src/lib/line/client.ts');
+  const fn = c.slice(c.indexOf('export async function getProfile'), c.indexOf('export async function getProfile') + 1200);
+  assert.match(fn, /console\.warn\(`\[line\] getProfile/);
+  assert.ok(!/console\.\w+\([^)]*\$\{userId\}/.test(fn), 'อย่าเขียนรหัสผู้ใช้เต็มลง log');
 });
 
 test('พนักงานเห็นเฉพาะลูกค้าที่มีเคสเปิด — ด่านอยู่ที่เซิร์ฟเวอร์', () => {

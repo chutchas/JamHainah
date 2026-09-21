@@ -32,7 +32,7 @@ const FILTERS: Array<{ key: string; label: string; test: (c: Customer) => boolea
 ];
 
 export default function Customers() {
-  const { state, message, data, busy, flash, reload } = useAdmin<Payload>('/api/admin/customers');
+  const { state, message, data, busy, flash, act, reload } = useAdmin<Payload>('/api/admin/customers');
   const [filter, setFilter] = useState('all');
   const [term, setTerm] = useState('');
 
@@ -56,8 +56,20 @@ export default function Customers() {
   return (
     <Shell role={data.me.role} onRefresh={reload} busy={busy} flash={flash}>
       <h2>ลูกค้า ({counts.all} คน)</h2>
+      {message && <p className="warn">{message}</p>}
       {!data.seesAll && (
         <p className="note left">ระดับพนักงานเห็นเฉพาะลูกค้าที่มีเคสเปิดอยู่</p>
+      )}
+      {/* ปุ่มขึ้นเฉพาะตอนที่มีคนไม่มีชื่อจริง ๆ — ปุ่มที่กดแล้วไม่มีอะไรเกิดขึ้น ทำให้คนสงสัยว่าพัง */}
+      {data.seesAll && all.some((c) => !c.name && !c.blocked) && (
+        <div className="acts">
+          <button
+            className="btn" disabled={busy}
+            onClick={() => act('/api/admin/customers', { op: 'fillNames' })}
+          >
+            ดึงชื่อจาก LINE ({all.filter((c) => !c.name && !c.blocked).length} คนที่ยังไม่มีชื่อ)
+          </button>
+        </div>
       )}
 
       <div className="chips">

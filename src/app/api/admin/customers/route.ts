@@ -1,14 +1,19 @@
 /**
  * รายชื่อลูกค้า — ใครแอดมา บันทึกอะไรไว้ และใบไหนใกล้หมด
  *
- * ดูอย่างเดียว ไม่มี POST — ข้อมูลเอกสารเป็นของลูกค้า
+ * เอกสารดูอย่างเดียว — ข้อมูลเอกสารเป็นของลูกค้า
  * ถ้าผิด ให้เขาแก้เองในหน้า "เอกสารของฉัน" ไม่ใช่ให้ทีมแก้แทนโดยเขาไม่รู้
+ *
+ * POST มีงานเดียว: ขอชื่อจาก LINE ให้คนที่ยังไม่มีชื่อ
+ * ชื่อเป็นของที่ LINE ให้มาอยู่แล้ว ไม่ใช่ของที่ทีมพิมพ์เอง จึงแตะได้แค่ display_name
  *
  * พนักงานเห็นเฉพาะลูกค้าที่มีเคสเปิดอยู่ (สิทธิ์ people ในตาราง CAN)
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, denied, can } from '@/lib/admin/auth';
 import { db } from '@/lib/db/client';
+import * as repo from '@/lib/db/repo';
+import { getProfile } from '@/lib/line/client';
 import { OPEN_STATUSES } from '@/lib/domain/caseWork';
 import { todayInBangkok, daysBetween } from '@/lib/domain/thaiDate';
 
@@ -89,5 +94,56 @@ export async function GET(req: NextRequest) {
         openCase: withOpenCase.has(u.line_user_id),
       };
     }),
+  });
+}
+
+/** ครั้งละไม่เกินเท่านี้ — Vercel ตัดที่ 10 วินาทีบนแพ็กเกจฟรี และ LINE ตอบคนละราว 0.1 วินาที */
+const FILL_MAX = 40;
+
+export async function POST(req: NextRequest) {
+  const gate = await requireAdmin(req);
+  if (!gate.ok) return denied(gate.status);
+  const who = gate.who;
+  if (!can(who, 'people')) {
+    return NextResponse.json({ error: 'ดึงชื่อได้เฉพาะเจ้าของระบบและหัวหน้า' }, { status: 403 });
+  }
+
+  const body = (await req.json().catch(() => ({}))) as { op?: string };
+  if (body.op !== 'fillNames') {
+    return NextResponse.json({ error: 'ไม่รู้จักคำสั่งนี้' }, { status: 400 });
+  }
+
+  // คนที่บล็อกแล้ว LINE ไม่ให้ชื่ออยู่แล้ว ไม่ต้องเสียเวลาถาม
+  const { data } = await db()
+    .from('users')
+    .select('line_user_id')
+    .is('display_name', null)
+    .is('deleted_at', null)
+    .is('unfollowed_at', null)
+    .limit(FILL_MAX);
+  const ids = ((data as Array<{ line_user_id: string }>) ?? []).map((r) => r.line_user_id);
+
+  let filled = 0;
+  for (const id of ids) {
+    const profile = await getProfile(id);
+    if (profile?.displayName) {
+      await repo.setDisplayName(id, profile.displayName);
+      filled++;
+    }
+  }
+
+  await repo.audit({
+    actor: who.userId, action: 'customer.names', entity: null,
+    before: null, after: { tried: ids.length, filled },
+  });
+
+  const more = ids.length === FILL_MAX ? ' — ยังมีอีก กดอีกครั้งได้' : '';
+  return NextResponse.json({
+    ok: true,
+    note: ids.length === 0
+      ? 'ทุกคนที่ยังเป็นเพื่อนอยู่มีชื่อแล้ว'
+      : filled === ids.length
+        ? `ได้ชื่อครบ ${filled} คน${more}`
+        : `ได้ชื่อ ${filled} จาก ${ids.length} คน — ที่เหลือ LINE ไม่ให้ชื่อ (ดูเหตุผลใน log ของ Vercel)${more}`,
   });
 }

@@ -32,6 +32,7 @@ const SAY: Record<string, string> = {
   'link.enable': 'เปิดปุ่มต่ออายุ',
   'link.disable': 'ปิดปุ่มต่ออายุ',
   'customer.view': 'เปิดดูข้อมูลลูกค้า',
+  'customer.names': 'ดึงชื่อลูกค้าจาก LINE',
 };
 
 export async function GET(req: NextRequest) {

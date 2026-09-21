@@ -64,9 +64,18 @@ export async function getProfile(userId: string): Promise<{ displayName?: string
     const res = await fetch(`${API}/profile/${userId}`, {
       headers: { Authorization: `Bearer ${env.line.token}` },
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      /**
+       * เดิมคืน null เงียบ ๆ — ชื่อหายแล้วไม่มีทางรู้ว่าเพราะอะไร
+       * 404 = คนนี้บล็อกหรือไม่ได้เป็นเพื่อนแล้ว (ปกติ) · 401 = token ผิด · 429 = ยิงถี่เกิน
+       * ย่อรหัสผู้ใช้ — log ไม่ใช่ที่เก็บข้อมูลส่วนบุคคล
+       */
+      console.warn(`[line] getProfile ${userId.slice(0, 5)}… ตอบ ${res.status}`);
+      return null;
+    }
     return (await res.json()) as { displayName?: string };
-  } catch {
+  } catch (err) {
+    console.warn(`[line] getProfile ${userId.slice(0, 5)}… ติดต่อ LINE ไม่ได้`, err);
     return null;
   }
 }
