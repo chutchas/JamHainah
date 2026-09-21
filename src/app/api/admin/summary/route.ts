@@ -40,7 +40,10 @@ export async function GET(req: NextRequest) {
     table: string,
     apply: (q: any) => any = (q) => q
   ): Promise<number> => {
-    const { count: n } = await apply(supabase.from(table).select('id', { count: 'exact', head: true }));
+    // นับด้วย '*' ไม่ใช่ 'id' — ตาราง users ไม่มีคอลัมน์ id (ใช้ line_user_id เป็นคีย์)
+    // เคยนับด้วย 'id' แล้ว Supabase ตอบ error เงียบ ๆ จนจำนวนผู้ใช้ขึ้น 0 ตลอด
+    const { count: n, error } = await apply(supabase.from(table).select('*', { count: 'exact', head: true }));
+    if (error) console.error(`[summary] นับ ${table} ไม่สำเร็จ`, error.message);
     return n ?? 0;
   };
 
