@@ -64,7 +64,19 @@ async function probe(url: string): Promise<{ ok: boolean; say: string }> {
       method: 'GET',
       redirect: 'follow',
       signal: AbortSignal.timeout(8000),
-      headers: { 'user-agent': 'Mozilla/5.0 (JamHainah link check)' },
+      /**
+       * แต่งตัวให้เหมือนเบราว์เซอร์บนมือถือคนไทย — เว็บราชการหลายแห่งปฏิเสธ
+       * คำขอที่ไม่มีหัวเหล่านี้ทันที ทั้งที่คนเปิดด้วยมือถือได้ปกติ
+       * ช่วยได้แค่กับเว็บที่กันบอทแบบง่าย เว็บที่กันเครื่องจากต่างประเทศยังผ่านไม่ได้อยู่ดี
+       * (เซิร์ฟเวอร์ Vercel ไม่ได้อยู่ในไทย) — กรณีนั้นใช้ปุ่มยืนยันเองแทน
+       */
+      headers: {
+        'user-agent':
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 '
+          + '(KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+        accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'accept-language': 'th-TH,th;q=0.9,en;q=0.6',
+      },
     });
     if (res.status < 400) return { ok: true, say: `เปิดได้ (${res.status})` };
     if (res.status === 403 || res.status === 401) {
@@ -83,7 +95,7 @@ export async function POST(req: NextRequest) {
   const who = gate.who;
 
   const body = (await req.json()) as {
-    id?: string; op?: 'check' | 'edit' | 'toggle';
+    id?: string; op?: 'check' | 'confirm' | 'edit' | 'toggle';
     label?: string; url?: string; searchTerm?: string;
   };
   const before = body.id ? await repo.getRenewAction(body.id) : null;
@@ -104,6 +116,23 @@ export async function POST(req: NextRequest) {
       });
     }
     return NextResponse.json({ ok: true, note: `${before.label}: ${result.say}`, alive: result.ok });
+  }
+
+  /**
+   * ---- ยืนยันเอง: ทุกคนทำได้ ----
+   * สำหรับลิงก์ที่เซิร์ฟเวอร์เปิดไม่ได้เพราะโดนกัน ทั้งที่คนเปิดได้ปกติ
+   * คนกดต้องเปิดดูด้วยตาตัวเองก่อน — บันทึกลงประวัติแยกจากการตรวจอัตโนมัติ
+   * เพื่อให้ย้อนดูได้ว่าวันที่ตรวจนี้มาจากเครื่องหรือจากคน และคนไหน
+   */
+  if (body.op === 'confirm') {
+    if (before.kind !== 'link') {
+      return NextResponse.json({ error: 'ปุ่มนี้ไม่ใช่ลิงก์เว็บไซต์' }, { status: 400 });
+    }
+    const after = await repo.updateRenewAction(before.id, { verified_at: todayInBangkok() });
+    await repo.audit({
+      actor: who.userId, action: 'link.verify.manual', entity: `renew_actions:${before.id}`, before, after,
+    });
+    return NextResponse.json({ ok: true, note: `บันทึกว่า ${before.label} เปิดได้แล้ว` });
   }
 
   // ---- แก้และเปิดปิด: หัวหน้าขึ้นไป ----

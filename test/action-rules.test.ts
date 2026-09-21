@@ -60,3 +60,14 @@ test('ปุ่มตรวจลิงก์ไม่รับ url จากค
   assert.match(src, /probe\(before\.url\)/);
   assert.ok(!/probe\(body\./.test(src), 'ปุ่มตรวจเอา url จาก request ไปเปิด');
 });
+
+/**
+ * ยืนยันเองต้องลงประวัติแยกจากการตรวจอัตโนมัติ
+ * ไม่งั้นย้อนดูไม่ได้ว่าวันที่ "ตรวจแล้ว" มาจากเครื่องหรือมาจากคนกด
+ */
+test('การยืนยันลิงก์ด้วยมือต้องบันทึกแยกและไม่เปิดเว็บเอง', () => {
+  const src = read('src/app/api/admin/links/route.ts');
+  const confirm = src.slice(src.indexOf("body.op === 'confirm'"), src.indexOf('// ---- แก้และเปิดปิด'));
+  assert.match(confirm, /link\.verify\.manual/);
+  assert.ok(!confirm.includes('probe('), 'ยืนยันเองแต่ไปเปิดเว็บด้วย');
+});

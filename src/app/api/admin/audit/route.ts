@@ -26,6 +26,7 @@ const SAY: Record<string, string> = {
   'reminder.retry.failed': 'ยิงเตือนซ้ำแล้วไม่ออก',
   'reminder.retry.skipped': 'ปิดรายการเตือนที่ไม่ต้องส่งแล้ว',
   'link.verify': 'ตรวจลิงก์ผ่าน',
+  'link.verify.manual': 'ยืนยันเองว่าลิงก์เปิดได้',
   'link.edit': 'แก้ปุ่มต่ออายุ',
   'link.enable': 'เปิดปุ่มต่ออายุ',
   'link.disable': 'ปิดปุ่มต่ออายุ',

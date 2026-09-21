@@ -164,6 +164,24 @@ export default function Links() {
                       {a.kind === 'link' && a.enabled && (
                         <button className="btn" disabled={busy || sweeping} onClick={() => check(a).then(() => reload())}>ตรวจ</button>
                       )}
+                      {/*
+                        เซิร์ฟเวอร์เปิดไม่ได้ไม่ได้แปลว่าลิงก์เสีย — เว็บราชการหลายแห่งกันเครื่องจากต่างประเทศ
+                        ให้คนเปิดดูเองแล้วยืนยัน ดีกว่าปล่อยให้ช่องแดงค้างจนแยกไม่ออกว่าอันไหนเสียจริง
+                      */}
+                      {a.kind === 'link' && a.enabled && ((r && !r.alive) || a.stale) && (
+                        <button
+                          className="btn" disabled={busy || sweeping}
+                          title="กดลิงก์ด้านบนเปิดดูก่อน ถ้าเปิดได้ค่อยกดปุ่มนี้"
+                          onClick={() => {
+                            if (window.confirm(`เปิดลิงก์ ${a.label} ดูแล้ว และหน้าเว็บขึ้นปกติใช่ไหม`)) {
+                              act('/api/admin/links', { id: a.id, op: 'confirm' })
+                                .then(() => setResults((x) => { const y = { ...x }; delete y[a.id]; return y; }));
+                            }
+                          }}
+                        >
+                          เปิดดูแล้ว ใช้ได้
+                        </button>
+                      )}
                       {data.canEdit && a.kind !== 'upsell' && (
                         <button className="btn" disabled={busy} onClick={() => startEdit(a)}>แก้</button>
                       )}
@@ -186,6 +204,9 @@ export default function Links() {
 
       <p className="note left">
         ปิดปุ่มแทนการลบ — ลิงก์ราชการที่ล่มชั่วคราวมักกลับมา และเปิดคืนได้ในคลิกเดียว
+        <br />
+        ลิงก์ที่ตรวจไม่ผ่านเพราะเว็บกันบอท ให้กดลิงก์เปิดดูเอง ถ้าขึ้นปกติกด &ldquo;เปิดดูแล้ว ใช้ได้&rdquo;
+        — เซิร์ฟเวอร์เราอยู่ต่างประเทศ เว็บราชการบางแห่งจึงไม่ยอมให้เข้า
       </p>
     </Shell>
   );
