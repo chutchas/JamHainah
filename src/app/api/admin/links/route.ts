@@ -18,6 +18,10 @@ import { checkLabel, checkUrl, checkSearchTerm } from '@/lib/domain/actionRules'
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// ตัวตรวจลิงก์ยิงออกจากเซิร์ฟเวอร์ Vercel ซึ่งค่าเริ่มต้นอยู่นอกเอเชีย
+// เว็บราชการไทยบางเว็บกัน IP ต่างประเทศ เลยให้เฉพาะหน้านี้รันที่สิงคโปร์ (ใกล้ไทยที่สุด)
+// ถ้าแพ็กเกจ Vercel ไม่รองรับการเลือกภูมิภาครายหน้า ค่านี้จะถูกเมิน ไม่ทำให้พัง
+export const preferredRegion = 'sin1';
 
 /** ไม่ได้ตรวจเกิน 90 วัน = น่าสงสัย ตรงกับ view v_links_to_check ใน migration 0007 */
 const STALE_DAYS = 90;
