@@ -64,6 +64,7 @@ export default function CasePage({ params }: { params: Promise<{ id: string }> }
           {data.document && ` · จาก${data.document.label} หมด ${data.document.expiryThai}`}
         </div>
         <UserId id={data.lineUserId} />
+        <a className="note left" href={`/admin/customers/${data.lineUserId}`}>ดูเอกสารทั้งหมดของลูกค้าคนนี้ →</a>
         {data.canEdit && (
           <div className="acts">
             {(NEXT[data.status] ?? []).map((next) => (

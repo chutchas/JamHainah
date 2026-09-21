@@ -32,3 +32,6 @@ export const VEHICLE_FIELDS = [
 export const STATUS_TH: Record<string, string> = {
   new: 'ใหม่', accepted: 'รับงานแล้ว', in_progress: 'กำลังทำ', done: 'เสร็จ', cancelled: 'ยกเลิก',
 };
+
+/** สถานะที่ยังไม่จบ — ใช้ตัดสินว่าพนักงานเปิดดูลูกค้าคนไหนได้ */
+export const OPEN_STATUSES = ['new', 'accepted', 'in_progress'] as const;

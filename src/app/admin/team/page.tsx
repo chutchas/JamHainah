@@ -7,7 +7,7 @@ import { ADMIN_ROLES, ROLE_TH, ROLE_WHAT, type AdminRole } from '@/lib/domain/ro
 
 interface AuditEntry {
   id: number; on: string; atThai: string; time: string;
-  byName: string; what: string; target: string | null; orderId: string | null;
+  byName: string; what: string; target: string | null; orderId: string | null; customerId: string | null;
 }
 
 /**
@@ -150,7 +150,9 @@ export default function Team() {
                     {e.target && (
                       e.orderId
                         ? <> · <a href={`/admin/cases/${e.orderId}`}>{e.target}</a></>
-                        : ` · ${e.target}`
+                        : e.customerId
+                          ? <> · <a href={`/admin/customers/${e.customerId}`}>{e.target}</a></>
+                          : ` · ${e.target}`
                     )}
                   </span>
                   <span className="tl-who">{e.byName}</span>

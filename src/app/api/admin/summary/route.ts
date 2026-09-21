@@ -60,6 +60,24 @@ export async function GET(req: NextRequest) {
     count('reminder_queue', (q) => q.eq('status', 'sent').gte('sent_at', daysAgo(7))),
   ]);
 
+  /**
+   * "เอกสาร/คน" แบบเดิมหารด้วยทุกคนที่แอด — 10 คน ใช้จริง 2 คน คนละ 3 ใบ ได้ 0.6
+   * ตัวเลขเดียวผสมสองเรื่องที่ต้องแก้คนละทาง จึงแยกเป็น
+   *   เริ่มใช้แล้ว    = คนที่ยังไม่บล็อก และมีเอกสารที่ยืนยันแล้วอย่างน้อยหนึ่งใบ
+   *   เอกสาร/คนที่ใช้ = เอกสารที่ยังเตือนอยู่จริง ÷ คนที่เริ่มใช้แล้ว
+   * ไม่นับเอกสารของคนที่บล็อก (ไม่มีการเตือนแล้ว) และใบที่ยังไม่กดถูกต้อง (ไม่ได้ตั้งคิว)
+   */
+  const [{ data: liveDocs }, { data: blockedRows }] = await Promise.all([
+    supabase.from('documents').select('line_user_id')
+      .is('archived_at', null).eq('confirmed_by_user', true).limit(20000),
+    supabase.from('users').select('line_user_id').not('unfollowed_at', 'is', null).limit(20000),
+  ]);
+  const blocked = new Set(((blockedRows as Array<{ line_user_id: string }>) ?? []).map((r) => r.line_user_id));
+  const reminding = ((liveDocs as Array<{ line_user_id: string }>) ?? [])
+    .filter((d) => !blocked.has(d.line_user_id));
+  const started = new Set(reminding.map((d) => d.line_user_id)).size;
+  const reachable = Math.max(0, users - unfollowed);
+
   // events 30 วันล่าสุด — ใช้ตอบทั้งเรื่องความแม่นและเรื่องงานเข้า
   const { data: evData } = await supabase
     .from('events')
@@ -137,7 +155,10 @@ export async function GET(req: NextRequest) {
     today,
     overview: {
       users, unfollowed, docs, confirmed,
-      docsPerUser: users > 0 ? Number((docs / users).toFixed(2)) : 0,
+      reachable,
+      started,
+      startedPct: reachable > 0 ? Math.round((100 * started) / reachable) : 0,
+      docsPerActive: started > 0 ? Number((reminding.length / started).toFixed(1)) : 0,
       confirmedPct: docs > 0 ? Math.round((100 * confirmed) / docs) : 0,
     },
     reminders: {

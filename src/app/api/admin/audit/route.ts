@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, denied, can } from '@/lib/admin/auth';
 import * as repo from '@/lib/db/repo';
+import { db } from '@/lib/db/client';
 import { formatThai } from '@/lib/domain/thaiDate';
 
 export const runtime = 'nodejs';
@@ -30,6 +31,7 @@ const SAY: Record<string, string> = {
   'link.edit': 'แก้ปุ่มต่ออายุ',
   'link.enable': 'เปิดปุ่มต่ออายุ',
   'link.disable': 'ปิดปุ่มต่ออายุ',
+  'customer.view': 'เปิดดูข้อมูลลูกค้า',
 };
 
 export async function GET(req: NextRequest) {
@@ -41,6 +43,18 @@ export async function GET(req: NextRequest) {
 
   const [rows, admins] = await Promise.all([repo.listAudit(60), repo.listAdmins()]);
   const nameBy = new Map(admins.map((a) => [a.line_user_id, a.display_name]));
+
+  // ชื่อลูกค้าที่ถูกเปิดดู — ไม่งั้นประวัติจะเป็นรหัส U ยาว ๆ ที่ไม่มีใครอ่านออก
+  const customerIds = [...new Set(rows
+    .filter((r) => r.entity?.startsWith('users:'))
+    .map((r) => r.entity!.slice(6)))];
+  const { data: people } = customerIds.length
+    ? await db().from('users').select('line_user_id, display_name').in('line_user_id', customerIds)
+    : { data: [] };
+  const customerBy = new Map(
+    ((people as Array<{ line_user_id: string; display_name: string | null }>) ?? [])
+      .map((p) => [p.line_user_id, p.display_name]),
+  );
 
   return NextResponse.json({
     me: { role: gate.who.role },
@@ -61,11 +75,14 @@ export async function GET(req: NextRequest) {
           ? `เคส ${r.entity.slice(7, 15)}`
           : r.entity.startsWith('admins:')
             ? (nameBy.get(r.entity.slice(7)) ?? 'คนในทีม')
+            : r.entity.startsWith('users:')
+              ? (customerBy.get(r.entity.slice(6)) ?? 'ลูกค้า')
             : r.entity.startsWith('renew_actions:')
               ? String((r.after as { label?: string } | null)?.label ?? 'ปุ่มต่ออายุ')
               : r.entity
         : null,
       orderId: r.entity?.startsWith('orders:') ? r.entity.slice(7) : null,
+      customerId: r.entity?.startsWith('users:') ? r.entity.slice(6) : null,
     })),
   });
 }

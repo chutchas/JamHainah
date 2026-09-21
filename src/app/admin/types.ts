@@ -20,7 +20,8 @@ export interface Summary {
   today: string;
   overview: {
     users: number; unfollowed: number; docs: number; confirmed: number;
-    docsPerUser: number; confirmedPct: number;
+    reachable: number; started: number; startedPct: number; docsPerActive: number;
+    confirmedPct: number;
   };
   reminders: {
     pendingToday: number; failedQueue: number; sentWeek: number;

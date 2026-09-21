@@ -19,8 +19,9 @@ import { ROLE_TH, type AdminRole } from '@/lib/domain/roles';
  */
 const NAV = [
   { href: '/admin', label: 'สรุป' },
+  { href: '/admin/customers', label: 'ลูกค้า' },
   { href: '/admin/cases', label: 'เคส' },
-  { href: '/admin/reminders', label: 'รายการค้าง' },
+  { href: '/admin/reminders', label: 'ค้างส่ง' },
   { href: '/admin/links', label: 'ลิงก์' },
   { href: '/admin/team', label: 'ทีม' },
 ];
@@ -156,7 +157,11 @@ export function useAdmin<T>(url: string) {
         window.location.href = '/api/admin/login';
         return;
       }
-      if (res.status === 403) throw new Error('บัญชีนี้ไม่ใช่ผู้ดูแลระบบ');
+      if (res.status === 403) {
+        // 403 มีสองแบบ: ไม่ใช่ผู้ดูแลเลย กับเป็นผู้ดูแลแต่ระดับไม่ถึง — ให้เซิร์ฟเวอร์บอกเองว่าแบบไหน
+        const out = await res.json().catch(() => ({}));
+        throw new Error(out.error ?? 'บัญชีนี้ไม่ใช่ผู้ดูแลระบบ');
+      }
       if (!res.ok) throw new Error(`โหลดข้อมูลไม่สำเร็จ (${res.status})`);
       setData(await res.json());
       setState('ready');

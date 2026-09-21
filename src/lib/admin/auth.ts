@@ -38,6 +38,8 @@ export interface AdminIdentity {
  *   retry    ยิงเตือนซ้ำ (เสียเงินจริงทุกครั้งที่กด)
  *   queue    รับงาน เปลี่ยนสถานะ จดโน้ต
  *   content  แก้ปุ่มและลิงก์ในข้อความเตือน (แก้ปุ๊บ ลูกค้าทุกคนเห็นทันที)
+ *   people   เปิดดูข้อมูลลูกค้าได้ทุกคน — คนที่ไม่มีสิทธิ์นี้ดูได้เฉพาะลูกค้าที่มีเคสเปิดอยู่
+ *            เพราะงานของพนักงานคือเคสตรงหน้า ไม่ใช่การไล่ดูว่าใครมีเอกสารอะไรบ้าง
  */
 export const CAN = {
   team:    ['owner'],
@@ -45,6 +47,7 @@ export const CAN = {
   retry:   ['owner', 'manager'],
   content: ['owner', 'manager'],
   queue:   ['owner', 'manager', 'staff'],
+  people:  ['owner', 'manager'],
 } as const satisfies Record<string, readonly repo.AdminRole[]>;
 
 export type Permission = keyof typeof CAN;

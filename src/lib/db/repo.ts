@@ -43,15 +43,27 @@ export interface PendingState {
 
 /* ---------------- users ---------------- */
 
-export async function upsertUser(lineUserId: string, displayName?: string | null) {
-  const { error } = await db()
+/**
+ * บันทึกว่าคนนี้ยังอยู่ และคืนชื่อที่เรามีอยู่ตอนนี้
+ *
+ * แตะชื่อเฉพาะตอนที่มีชื่อจริงส่งมา — เดิมส่ง display_name: null ไปทุกครั้งที่ผู้ใช้พิมพ์
+ * ชื่อที่ได้ตอนแอดเพื่อนจึงถูกลบทิ้งตั้งแต่ข้อความแรก แล้วห้องทำงานขึ้นว่า "ผู้ใช้" ทุกคน
+ */
+export async function upsertUser(lineUserId: string, displayName?: string | null): Promise<string | null> {
+  const row: Record<string, unknown> = { line_user_id: lineUserId, unfollowed_at: null, deleted_at: null };
+  if (displayName) row.display_name = displayName;
+  const { data, error } = await db()
     .from('users')
-    .upsert(
-      { line_user_id: lineUserId, display_name: displayName ?? null, unfollowed_at: null, deleted_at: null },
-      { onConflict: 'line_user_id' }
-    );
+    .upsert(row, { onConflict: 'line_user_id' })
+    .select('display_name')
+    .maybeSingle();
   // เดิมฟังก์ชันนี้กลืน error เงียบ ๆ ทำให้ขั้นถัดไปพังโดยไม่รู้ว่าต้นเหตุอยู่ตรงนี้
   if (error) throw new Error(`upsertUser: ${error.message}`);
+  return (data as { display_name: string | null } | null)?.display_name ?? null;
+}
+
+export async function setDisplayName(lineUserId: string, displayName: string) {
+  await db().from('users').update({ display_name: displayName }).eq('line_user_id', lineUserId);
 }
 
 export async function markUnfollowed(lineUserId: string) {
@@ -670,7 +682,8 @@ export async function addOrderNote(args: {
 
 /** หาลูกค้าจากชื่อหรือรหัส — ตอนเปิดเคสเองต้องรู้ว่าเปิดให้ใคร */
 export async function searchUsers(q: string, limit = 10) {
-  const term = q.trim();
+  // ตัดอักขระที่มีความหมายในตัวกรองของ PostgREST ออก ไม่งั้นพิมพ์ , หรือ ) แล้วคำค้นกลายเป็นคำสั่ง
+  const term = q.replace(/[,()%*\\]/g, ' ').trim();
   if (!term) return [];
   const { data } = await db()
     .from('users')
@@ -753,4 +766,52 @@ export async function hardDeleteUser(lineUserId: string) {
   // documents / reminder_queue มี on delete cascade อยู่แล้ว
   await supabase.from('documents').delete().eq('line_user_id', lineUserId);
   await supabase.from('users').update({ deleted_at: new Date().toISOString(), pending: {} }).eq('line_user_id', lineUserId);
+}
+
+/** บล็อกนานเท่านี้แล้วลบจริง — ตรงกับที่หน้า /privacy สัญญาไว้ */
+export const BLOCKED_KEEP_DAYS = 30;
+
+/**
+ * ลบข้อมูลของคนที่บล็อกบอทเกิน 30 วัน
+ *
+ * หน้า /privacy บอกว่าเก็บ "จนกว่าคุณจะสั่งลบ หรือบล็อก" แต่เดิมโค้ดแค่จดว่าบล็อก
+ * แล้วเก็บเอกสารไว้ตลอดไป — สัญญาที่ไม่มีโค้ดรองรับ คือสัญญาที่ผิดตั้งแต่วันแรก
+ *
+ * ทำไมไม่ลบทันที: คนเผลอบล็อกแล้วกลับมาแอดใหม่มีจริง 30 วันให้เขากลับมาเจอของเดิม
+ * ชื่อก็ลบด้วย เพราะเป็นข้อมูลส่วนบุคคลชิ้นเดียวที่เหลืออยู่ในแถวนั้น
+ */
+export async function purgeBlockedUsers(now = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - BLOCKED_KEEP_DAYS * 86_400_000).toISOString();
+  const { data } = await db()
+    .from('users')
+    .select('line_user_id')
+    .not('unfollowed_at', 'is', null)
+    .lte('unfollowed_at', cutoff)
+    .is('deleted_at', null)
+    .limit(200);
+  const ids = ((data as Array<{ line_user_id: string }>) ?? []).map((r) => r.line_user_id);
+  for (const id of ids) {
+    await hardDeleteUser(id);
+    await db().from('users').update({ display_name: null }).eq('line_user_id', id);
+  }
+  return ids.length;
+}
+
+/**
+ * จดว่าใครเปิดดูข้อมูลลูกค้าคนไหน — วันละครั้งต่อคนดูต่อลูกค้า
+ *
+ * จดทุกครั้งที่กดรีเฟรช ประวัติจะเต็มไปด้วยการดู จนมองไม่เห็นการแก้ไขจริง
+ * วันละครั้งพอจะตอบลูกค้าได้ว่า "ใครเคยเปิดดูข้อมูลของฉัน เมื่อไหร่"
+ */
+export async function auditViewOncePerDay(actor: string, lineUserId: string, today: string) {
+  const entity = `users:${lineUserId}`;
+  const { count } = await db()
+    .from('audit_log')
+    .select('*', { count: 'exact', head: true })
+    .eq('actor', actor)
+    .eq('action', 'customer.view')
+    .eq('entity', entity)
+    .gte('at', `${today}T00:00:00+07:00`);
+  if ((count ?? 0) > 0) return;
+  await audit({ actor, action: 'customer.view', entity });
 }

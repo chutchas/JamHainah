@@ -17,7 +17,7 @@ import { db } from '@/lib/db/client';
 import { cronReport } from '@/lib/line/messages';
 import { todayInBangkok } from '@/lib/domain/thaiDate';
 import { notifyAdmin } from '@/lib/line/admin';
-import { track, purgeFinishedOrders } from '@/lib/db/repo';
+import { track, purgeFinishedOrders, purgeBlockedUsers } from '@/lib/db/repo';
 import { loadRenewActions } from '@/lib/domain/renewActions';
 import {
   QUEUE_SELECT, groupByUser, isDead, markFailed, sendToUser, type QueueRow,
@@ -144,6 +144,15 @@ async function runOnce() {
     if (purged > 0) console.log(`[cron] purged vehicle data of ${purged} orders`);
   } catch (err) {
     console.error('[cron] purge orders failed', err);
+  }
+
+  // ลบข้อมูลของคนที่บล็อกเกิน 30 วัน — ตามที่หน้า /privacy สัญญาไว้
+  // รอบเที่ยงก็รันซ้ำได้ ไม่มีผลเสีย เพราะคนที่ลบแล้วถูกกรองออกด้วย deleted_at
+  try {
+    const gone = await purgeBlockedUsers();
+    if (gone > 0) console.log(`[cron] purged data of ${gone} blocked users`);
+  } catch (err) {
+    console.error('[cron] purge blocked users failed', err);
   }
 
   return summary;

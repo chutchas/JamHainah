@@ -103,9 +103,16 @@ export default function AdminHome() {
 
       <h2>ผู้ใช้</h2>
       <div className="tiles">
-        <div className="tile"><span className="n">{overview.users}</span><span className="l">ผู้ใช้</span></div>
+        <a className="tile" href="/admin/customers">
+          <span className="n">{overview.users}</span><span className="l">ผู้ใช้</span>
+        </a>
+        {/* แอดแล้วใช้ต่อจริงกี่คน — ต่ำ = ปัญหาที่ด่านแรก ไม่ใช่ที่การเตือน */}
+        <div className="tile">
+          <span className="n">{overview.started}</span>
+          <span className="l">เริ่มใช้แล้ว ({overview.startedPct}%)</span>
+        </div>
+        <div className="tile"><span className="n">{overview.docsPerActive}</span><span className="l">เอกสาร/คนที่ใช้</span></div>
         <div className="tile"><span className="n">{overview.docs}</span><span className="l">เอกสาร</span></div>
-        <div className="tile"><span className="n">{overview.docsPerUser}</span><span className="l">เอกสาร/คน</span></div>
         <div className="tile"><span className="n">{overview.confirmedPct}%</span><span className="l">ยืนยันแล้ว</span></div>
         <div className="tile"><span className="n">{overview.unfollowed}</span><span className="l">บล็อก/ลบเพื่อน</span></div>
       </div>

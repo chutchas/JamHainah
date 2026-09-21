@@ -127,6 +127,20 @@ export async function handleEvent(ev: Ev): Promise<void> {
   }
 }
 
+/**
+ * บันทึกว่าผู้ใช้ยังอยู่ และเติมชื่อให้ถ้ายังไม่มี
+ *
+ * คนที่แอดมาก่อนเราแก้บั๊กชื่อหาย จะได้ชื่อกลับมาเองตอนทักครั้งถัดไป
+ * ดึงโปรไฟล์จาก LINE เฉพาะตอนที่ไม่มีชื่อ — มีชื่อแล้วไม่เสียเวลาเพิ่มสักข้อความ
+ * ดึงไม่ได้ก็ปล่อยผ่าน ชื่อในห้องทำงานไม่ใช่เหตุผลที่จะทำให้การตอบลูกค้าช้าหรือล้ม
+ */
+async function touchUser(userId: string): Promise<void> {
+  const name = await repo.upsertUser(userId);
+  if (name) return;
+  const profile = await getProfile(userId);
+  if (profile?.displayName) await repo.setDisplayName(userId, profile.displayName);
+}
+
 /* ---------------- ฉาก 01 ---------------- */
 
 async function onFollow(ev: Ev, userId: string) {
@@ -140,7 +154,7 @@ async function onFollow(ev: Ev, userId: string) {
 /* ---------------- ข้อความ ---------------- */
 
 async function onMessage(ev: Ev, userId: string) {
-  await repo.upsertUser(userId);
+  await touchUser(userId);
   const msg = ev.message;
   const today = todayInBangkok();
 
@@ -351,7 +365,7 @@ async function createAndSchedule(args: {
  */
 async function onImageBatch(events: Ev[], userId: string) {
   const today = todayInBangkok();
-  await repo.upsertUser(userId);
+  await touchUser(userId);
   await showLoading(userId, 40);
 
   const saved: M.ExtractedDoc[] = [];
@@ -414,7 +428,7 @@ const SLOW_ACTIONS = new Set([
 ]);
 
 async function onPostback(ev: Ev, userId: string) {
-  await repo.upsertUser(userId);
+  await touchUser(userId);
   const params = new URLSearchParams(ev.postback?.data ?? '');
   const action = params.get('a');
   const docId = params.get('d');
